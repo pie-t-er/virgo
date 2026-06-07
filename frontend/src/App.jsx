@@ -3,6 +3,8 @@ import Chat from "./components/Chat.jsx";
 import WardrobeGrid from "./components/WardrobeGrid.jsx";
 import CalendarView from "./components/CalendarView.jsx";
 import Settings from "./components/Settings.jsx";
+import Landing from "./components/Landing.jsx";
+import logo from "./virgo_logo.png";
 import "./App.css";
 
 const TABS = [
@@ -13,12 +15,17 @@ const TABS = [
 ];
 
 export default function App() {
+  const [showLanding, setShowLanding] = useState(
+    () => !sessionStorage.getItem("virgo_entered")
+  );
   const [activeTab, setActiveTab] = useState("chat");
   const [refreshKey, setRefreshKey] = useState(0);
   const [profile, setProfile] = useState(null);
   const [showSetup, setShowSetup] = useState(false);
 
+  // All hooks must be declared before any conditional returns
   useEffect(() => {
+    if (showLanding) return;
     fetch("/api/profile")
       .then((r) => r.json())
       .then((p) => {
@@ -26,20 +33,34 @@ export default function App() {
         if (!p.gender) setShowSetup(true);
       })
       .catch(() => setShowSetup(true));
-  }, []);
+  }, [showLanding]);
+
+  function enterApp() {
+    sessionStorage.setItem("virgo_entered", "1");
+    setShowLanding(false);
+  }
+
+  function goHome() {
+    setShowLanding(true);
+  }
 
   const onAgentAction = () => setRefreshKey((k) => k + 1);
+  const onProfileSave = (p) => { setProfile(p); setShowSetup(false); };
 
-  const onProfileSave = (p) => {
-    setProfile(p);
-    setShowSetup(false);
-  };
+  if (showLanding) {
+    return <Landing onEnter={enterApp} />;
+  }
 
   return (
     <div className="app">
       <header className="app-header">
-        <div className="logo">
-          <span className="logo-icon">♍</span>
+        <div
+          className="logo"
+          onClick={goHome}
+          style={{ cursor: "pointer" }}
+          title="Back to home"
+        >
+          <img src={logo} alt="Virgo" className="header-logo-img" />
           <span className="logo-text">Virgo</span>
         </div>
         <nav className="tabs">
@@ -56,9 +77,7 @@ export default function App() {
         <div className="header-spacer" />
       </header>
 
-      {showSetup && (
-        <SetupModal onSave={onProfileSave} />
-      )}
+      {showSetup && <SetupModal onSave={onProfileSave} />}
 
       <main className="app-main">
         {activeTab === "chat" && <Chat onAgentAction={onAgentAction} />}
@@ -93,7 +112,7 @@ function SetupModal({ onSave }) {
   return (
     <div className="modal-overlay">
       <div className="modal">
-        <div className="modal-logo">♍</div>
+        <img src={logo} alt="Virgo" className="modal-logo-img" />
         <h2>Welcome to Virgo</h2>
         <p>Let's personalise your wardrobe experience.</p>
 

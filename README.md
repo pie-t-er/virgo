@@ -2,7 +2,7 @@
 
 A conversational wardrobe management agent built for the [Google Cloud Rapid Agent Hackathon](https://googlecloudmultiagents.devpost.com/) (MongoDB track).
 
-**Live demo:** [https://virgo-HASH-uc.a.run.app](https://virgo-HASH-uc.a.run.app) *(URL updated post-deploy)*
+**Live demo:** [https://virgo-85048588163.us-central1.run.app](https://virgo-85048588163.us-central1.run.app)
 
 ---
 

@@ -23,12 +23,12 @@ from backend.tools import ALL_TOOLS
 # Ordered roughly best→most-available.
 # --------------------------------------------------------------------------- #
 MODEL_ROTATION = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash",       # primary — best reasoning, billing unlocked
+    "gemini-2.0-flash",       # fallback 1 — fast, stable
+    "gemini-2.5-flash-lite",  # fallback 2 — cheaper, still capable
+    "gemini-3.5-flash",       # fallback 3
+    "gemini-3.1-flash-lite",  # fallback 4
+    "gemini-2.0-flash-lite",  # fallback 5 — last resort
 ]
 
 SYSTEM_PROMPT = """You are Virgo, a friendly and knowledgeable personal wardrobe assistant.
@@ -156,7 +156,11 @@ async def init_state() -> AgentState:
 # Run a conversation turn with automatic model rotation on quota errors
 # --------------------------------------------------------------------------- #
 
-async def run_turn(user_message: str) -> str:
+async def run_turn(user_message: str) -> dict:
+    """
+    Returns {"text": str, "items": list[dict]} where items are wardrobe
+    items surfaced by tool calls during this turn (for inline card display).
+    """
     state = get_state()
     content = genai_types.Content(
         role="user",
@@ -169,16 +173,69 @@ async def run_turn(user_message: str) -> str:
         tried.add(state.model_index)
         try:
             response_parts: list[str] = []
+            surfaced_items: list[dict] = []
+            seen_ids: set[str] = set()
+
             async for event in state.runner.run_async(
                 user_id="demo_user",
                 session_id=state.session_id,
                 new_message=content,
             ):
+                # Collect text from final response
                 if event.is_final_response() and event.content:
                     for part in event.content.parts:
                         if part.text:
                             response_parts.append(part.text)
-            return "\n".join(response_parts) or "I couldn't process that request."
+
+                # Harvest wardrobe items from tool responses
+                # ADK uses role="user" for function responses (not "tool")
+                if (
+                    event.content
+                    and event.content.role == "user"
+                    and event.content.parts
+                ):
+                    for part in event.content.parts:
+                        if not part.function_response:
+                            continue
+                        result = part.function_response.response
+                        # result is a dict like {"result": [...]} or the list itself
+                        rows = result.get("result", result) if isinstance(result, dict) else result
+                        if not isinstance(rows, list):
+                            continue
+                        for row in rows:
+                            if not isinstance(row, dict):
+                                continue
+                            # Only include actual wardrobe items (have _id and name)
+                            item_id = row.get("_id")
+                            if item_id and item_id not in seen_ids and row.get("name"):
+                                seen_ids.add(item_id)
+                                surfaced_items.append(row)
+
+            text = "\n".join(response_parts) or "I couldn't process that request."
+
+            # Selected = items the agent actually named in its response
+            text_lower = text.lower()
+            selected_items = [
+                item for item in surfaced_items
+                if item.get("name", "").lower() in text_lower
+            ]
+            if not selected_items:
+                selected_items = surfaced_items[:6]
+
+            # Build candidate pool: all surfaced items grouped by type,
+            # with the selected item for each type placed first so the
+            # frontend can offer swaps without another API call.
+            candidates: dict[str, list] = {}
+            for item in surfaced_items:
+                t = item.get("type", "other")
+                candidates.setdefault(t, []).append(item)
+
+            # Move selected items to front of their type bucket
+            selected_ids = {i.get("_id") for i in selected_items}
+            for t, pool in candidates.items():
+                pool.sort(key=lambda x: (0 if x.get("_id") in selected_ids else 1))
+
+            return {"text": text, "items": selected_items, "candidates": candidates}
 
         except (ClientError, ServerError) as e:
             msg = str(e)
@@ -187,15 +244,13 @@ async def run_turn(user_message: str) -> str:
             if not (is_quota or is_unavail):
                 raise
 
-            # Try next model in rotation
-            next_model = state.switch_model()
+            state.switch_model()
             if state.model_index in tried:
-                break  # full loop exhausted
-            # small pause before retrying
+                break
             await asyncio.sleep(1)
             continue
 
-    return (
-        "All models are currently at capacity. Please wait a moment and use "
-        "the ↺ retry button to try again."
-    )
+    return {
+        "text": "All models are currently at capacity. Please wait a moment and use the ↺ retry button to try again.",
+        "items": [],
+    }

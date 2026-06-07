@@ -39,14 +39,31 @@ ARTICLE_TO_TYPE = {
     "Hats": "accessory",
 }
 
-# occasion inference from item name keywords
+# occasion inference from item name + article type
 OCCASION_KEYWORDS = {
-    "work": ["dress", "oxford", "blazer", "formal", "business", "office", "slacks", "chino"],
-    "casual": ["casual", "sneaker", "tee", "jeans", "shorts", "loafer", "hoodie", "sweatshirt"],
-    "formal": ["formal", "gown", "tuxedo", "oxford", "heels", "suit"],
-    "party": ["party", "cocktail", "sequin", "glitter", "festive"],
-    "outdoor": ["boot", "hiking", "trail", "fleece", "parka", "raincoat"],
-    "beach": ["sandal", "swim", "linen", "tank"],
+    "formal": ["formal", "gown", "tuxedo", "suit", "blazer", "oxford", "dress shirt",
+               "button-down", "button down", "wing tip", "wingtip", "loafer", "derby",
+               "chino", "slacks", "crepe", "ponte", "tailored"],
+    "work":   ["office", "business", "career", "work", "professional", "stretch dress",
+               "slim-fit dress", "slim fit dress", "dress pant", "pencil"],
+    "casual": ["casual", "sneaker", "tee", "t-shirt", "jeans", "shorts", "loafer",
+               "hoodie", "sweatshirt", "pullover", "crewneck", "graphic", "jersey"],
+    "party":  ["party", "cocktail", "sequin", "glitter", "festive", "satin", "velvet"],
+    "outdoor":["boot", "hiking", "trail", "fleece", "parka", "raincoat", "anorak"],
+    "beach":  ["sandal", "swim", "linen", "tank", "espadrille"],
+}
+
+# Default occasions by article type when no keywords match
+ARTICLE_DEFAULT_OCCASIONS = {
+    "Shirts":   ["work", "casual"],
+    "Sweaters": ["casual", "work"],
+    "Jackets":  ["casual", "work"],
+    "Pants":    ["casual", "work"],
+    "Shorts":   ["casual", "beach"],
+    "Dresses":  ["casual", "party"],
+    "Skirts":   ["casual", "work"],
+    "Shoes":    ["casual"],
+    "Hats":     ["casual", "outdoor"],
 }
 
 SEASON_BY_TYPE = {
@@ -64,7 +81,9 @@ def infer_occasions(name: str, article: str) -> list[str]:
         if any(kw in name_lower for kw in kws):
             occasions.add(occ)
     if not occasions:
-        occasions.add("casual")
+        # Fall back to article-type defaults rather than always "casual"
+        defaults = ARTICLE_DEFAULT_OCCASIONS.get(article, ["casual"])
+        occasions.update(defaults)
     return list(occasions)
 
 

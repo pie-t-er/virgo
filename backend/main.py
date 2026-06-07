@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from bson import ObjectId
-from fastapi import FastAPI, Query
+from fastapi import APIRouter, FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -44,6 +44,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+api = APIRouter(prefix="/api")
+
 
 # --------------------------------------------------------------------------- #
 # models
@@ -56,48 +58,54 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     model: str = ""
+    items: list = []
+    candidates: dict = {}
 
 
 # --------------------------------------------------------------------------- #
 # routes
 # --------------------------------------------------------------------------- #
 
-@app.get("/health")
+@api.get("/health")
 def health():
     state = get_state()
     return {"status": "ok", "model": state.current_model}
 
 
-@app.post("/reset")
+@api.post("/reset")
 async def reset_session():
     """Clear conversation history; keep current model."""
     await get_state().reset()
     return {"status": "reset"}
 
 
-@app.get("/profile")
+@api.get("/profile")
 def read_profile():
     p = get_profile()
     p.pop("_id", None)
     return p
 
 
-@app.put("/profile")
+@api.put("/profile")
 async def update_profile(data: dict):
     save_profile(data)
-    # Rebuild runner so new profile is injected, then reset session
     await get_state().reset(rebuild=True)
     return {"status": "ok"}
 
 
-@app.post("/chat", response_model=ChatResponse)
+@api.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     state = get_state()
-    reply = await run_turn(req.message)
-    return ChatResponse(response=reply, model=state.current_model)
+    result = await run_turn(req.message)
+    return ChatResponse(
+        response=result["text"],
+        items=result["items"],
+        candidates=result.get("candidates", {}),
+        model=state.current_model,
+    )
 
 
-@app.get("/wardrobe")
+@api.get("/wardrobe")
 def get_wardrobe(
     type: str = Query(""),
     color: str = Query(""),
@@ -118,7 +126,7 @@ def get_wardrobe(
     return [_serialize(d) for d in docs]
 
 
-@app.get("/calendar")
+@api.get("/calendar")
 def get_calendar(
     start: str = Query(..., description="YYYY-MM-DD"),
     end: str = Query(..., description="YYYY-MM-DD"),
@@ -139,20 +147,22 @@ def get_calendar(
     return results
 
 
-@app.delete("/calendar/{date}")
+@api.delete("/calendar/{date}")
 def delete_calendar_entry(date: str):
     dt = datetime.datetime.fromisoformat(date)
     result = calendar_col().delete_one({"date": dt})
     return {"deleted": result.deleted_count > 0}
 
 
-@app.delete("/wardrobe/{item_id}")
+@api.delete("/wardrobe/{item_id}")
 def delete_wardrobe_item(item_id: str):
     result = wardrobe_col().delete_one({"_id": ObjectId(item_id)})
     return {"deleted": result.deleted_count > 0}
 
 
-# Serve built frontend (production / Cloud Run)
+app.include_router(api)
+
+# Serve built frontend (production / Cloud Run) — must come after API routes
 _frontend_dist = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.isdir(_frontend_dist):
     app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="static")

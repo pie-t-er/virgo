@@ -1,0 +1,340 @@
+/* Landing page — sits outside the main app shell */
+
+:root {
+  --orange: #f26b1d;
+  --orange-dim: rgba(242, 107, 29, 0.15);
+}
+
+.landing {
+  min-height: 100dvh;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", sans-serif;
+}
+
+/* ── Nav ──────────────────────────────────────────────── */
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 48px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(15, 15, 17, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 10;
+}
+
+.landing-nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.nav-logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.landing-nav-cta {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: var(--radius-sm);
+  padding: 8px 18px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.landing-nav-cta:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+/* ── Hero ─────────────────────────────────────────────── */
+
+.landing-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 100px 24px 80px;
+  overflow: hidden;
+}
+
+.hero-glow {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero-logo {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  margin-bottom: 32px;
+  filter: drop-shadow(0 8px 32px rgba(124, 58, 237, 0.4));
+}
+
+.hero-title {
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+}
+
+.hero-accent {
+  color: var(--orange);
+}
+
+.hero-sub {
+  max-width: 540px;
+  font-size: 1.05rem;
+  color: var(--text2);
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+/* ── Buttons ──────────────────────────────────────────── */
+
+.btn-primary {
+  background: var(--orange);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 13px 28px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  transition: opacity 0.15s, transform 0.1s;
+  cursor: pointer;
+}
+
+.btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.btn-primary.large { padding: 16px 36px; font-size: 1.05rem; }
+
+.btn-ghost {
+  color: var(--text2);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 13px 20px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+}
+
+.btn-ghost:hover { color: var(--text); }
+
+/* ── Features ─────────────────────────────────────────── */
+
+.landing-features {
+  padding: 80px 48px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.section-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 48px;
+  letter-spacing: -0.01em;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.2s;
+}
+
+.feature-card:hover { border-color: var(--accent); }
+
+.feature-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.feature-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.feature-card p {
+  font-size: 0.88rem;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+/* ── About ────────────────────────────────────────────── */
+
+.landing-about {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 80px 48px;
+}
+
+.about-inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 64px;
+  align-items: center;
+}
+
+.about-eyebrow {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 16px;
+}
+
+.about-text h2 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+.about-text p {
+  color: var(--text2);
+  line-height: 1.7;
+  font-size: 0.95rem;
+  margin-bottom: 28px;
+  max-width: 460px;
+}
+
+.about-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.about-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.93rem;
+  font-weight: 500;
+}
+
+.list-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.list-dot.orange { background: var(--orange); }
+
+.about-logo-wrap {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-logo {
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+}
+
+/* ── Bottom CTA ───────────────────────────────────────── */
+
+.landing-cta {
+  text-align: center;
+  padding: 100px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+.landing-cta h2 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ── Footer ───────────────────────────────────────────── */
+
+.landing-footer {
+  border-top: 1px solid var(--border);
+  padding: 28px 48px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.footer-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-right: auto;
+}
+
+.landing-footer p {
+  font-size: 0.8rem;
+  color: var(--text2);
+}
+
+.landing-footer a {
+  font-size: 0.8rem;
+  color: var(--text2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.landing-footer a:hover { color: var(--orange); }
+
+/* ── Responsive ───────────────────────────────────────── */
+
+@media (max-width: 700px) {
+  .landing-nav { padding: 14px 20px; }
+  .landing-features, .landing-about { padding: 60px 20px; }
+  .about-inner { grid-template-columns: 1fr; }
+  .about-logo-wrap { display: none; }
+  .landing-footer { flex-wrap: wrap; gap: 12px; }
+}

@@ -9,9 +9,13 @@
   padding: 0 16px;
 }
 
+/* ── Toolbar ──────────────────────────────────────────── */
+
 .chat-toolbar {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
   padding: 8px 0 0;
   flex-shrink: 0;
 }
@@ -41,13 +45,25 @@
   border-color: var(--accent);
 }
 
+/* ── Messages ─────────────────────────────────────────── */
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
   padding: 24px 0 8px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+}
+
+/* Slide-in animation for new messages */
+@keyframes msg-slide-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.msg-appear {
+  animation: msg-slide-in 0.2s ease-out both;
 }
 
 .msg {
@@ -56,9 +72,30 @@
   align-items: flex-start;
 }
 
-.msg-user {
-  flex-direction: row-reverse;
+.msg-user { flex-direction: row-reverse; }
+
+/* ── Avatar ───────────────────────────────────────────── */
+
+.msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
 }
+
+.msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ── Bubble wrap + actions ────────────────────────────── */
 
 .msg-bubble-wrap {
   display: flex;
@@ -67,38 +104,40 @@
   max-width: 72%;
 }
 
-.msg-user .msg-bubble-wrap {
-  align-items: flex-end;
+.msg-user .msg-bubble-wrap { align-items: flex-end; }
+
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
 
-.retry-btn {
+.msg:hover .msg-actions { opacity: 1; }
+
+.msg-action-btn {
   background: none;
   border: none;
   color: var(--text2);
   font-size: 13px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  align-self: flex-start;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
-  cursor: pointer;
-}
-
-.msg:hover .retry-btn { opacity: 1; }
-.retry-btn:hover:not(:disabled) { color: var(--accent); }
-.retry-btn:disabled { cursor: default; }
-
-.msg-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--accent2);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+  cursor: pointer;
 }
+
+.msg-action-btn:hover:not(:disabled) {
+  color: var(--accent);
+  background: rgba(167,139,250,0.1);
+}
+
+.msg-action-btn:disabled { opacity: 0.3; cursor: default; }
+
+/* ── Bubbles ──────────────────────────────────────────── */
 
 .msg-bubble {
   padding: 12px 16px;
@@ -132,19 +171,24 @@
   font-size: 0.88em;
 }
 
-/* typing indicator */
+
+/* ── Typing indicator ─────────────────────────────────── */
+
 .typing-dots {
   display: inline-flex;
   gap: 4px;
   align-items: center;
 }
+
 .typing-dots span {
   display: block;
-  width: 6px; height: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--text2);
   animation: dot-bounce 1.2s infinite;
 }
+
 .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
 .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
 
@@ -153,7 +197,8 @@
   40% { transform: translateY(-5px); opacity: 1; }
 }
 
-/* suggestions */
+/* ── Suggestions ──────────────────────────────────────── */
+
 .suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -169,6 +214,7 @@
   padding: 7px 14px;
   font-size: 0.85rem;
   transition: border-color 0.15s, color 0.15s;
+  cursor: pointer;
 }
 
 .suggestion-chip:hover {
@@ -176,7 +222,8 @@
   color: var(--text);
 }
 
-/* input row */
+/* ── Input row ────────────────────────────────────────── */
+
 .chat-input-row {
   display: flex;
   gap: 10px;
@@ -206,7 +253,8 @@
 .chat-input::placeholder { color: var(--text2); }
 
 .send-btn {
-  width: 44px; height: 44px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--accent2);
   border: none;
@@ -217,6 +265,7 @@
   justify-content: center;
   transition: background 0.15s, opacity 0.15s;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 .send-btn:hover:not(:disabled) { background: var(--accent); }

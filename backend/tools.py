@@ -96,33 +96,50 @@ def get_wardrobe(
     return results
 
 
-def semantic_search(query: str, top_k: int = 8) -> list[dict]:
+def semantic_search(query: str, top_k: int = 8, item_type: str = "") -> list[dict]:
     """Find clothing items semantically similar to the query using Atlas Vector Search.
     Use this to find items matching a natural language description, occasion, or style.
-    Prefer this over get_wardrobe when looking for outfit recommendations."""
+    Prefer this over get_wardrobe when looking for outfit recommendations.
+    Pass item_type (e.g. 'top', 'bottom', 'shoes') to restrict results to one category."""
+    from backend.db import get_profile
     embedding = embed_text(query)
-    pipeline = [
+
+    # Build post-filter for gender and optional type
+    profile = get_profile()
+    gender = profile.get("gender", "")
+    match_filter: dict = {}
+    if gender:
+        match_filter["tags"] = {"$in": [gender]}
+    if item_type:
+        match_filter["type"] = item_type.lower()
+
+    # Fetch extra candidates so post-filter $match has enough to work with
+    pipeline: list = [
         {
             "$vectorSearch": {
                 "index": "wardobe_vector_index",
                 "path": "embedding",
                 "queryVector": embedding,
-                "numCandidates": top_k * 10,
-                "limit": top_k,
+                "numCandidates": top_k * 20,
+                "limit": top_k * 4,
             }
         },
-        {
-            "$project": {
-                "embedding": 0,
-                "description": 0,
-                "score": {"$meta": "vectorSearchScore"},
-            }
-        },
+        # Post-filter by gender/type after vector search
+        # (filter inside $vectorSearch requires index config changes)
+        *([ {"$match": match_filter} ] if match_filter else []),
+        {"$limit": top_k},
+        {"$project": {
+            "embedding": 0,
+            "description": 0,
+            "score": {"$meta": "vectorSearchScore"},
+        }},
     ]
+
     try:
         docs = list(wardrobe_col().aggregate(pipeline))
         if not docs:
-            return [{"error": "No results found. The vector index may still be building — try again in a moment, or use get_wardrobe with a type filter instead."}]
+            type_hint = f" of type '{item_type}'" if item_type else ""
+            return [{"error": f"No items found{type_hint}. Try adding more clothing to your wardrobe, or use get_wardrobe to see what's available."}]
         slim_fields = {"_id", "name", "type", "color", "brand", "occasion", "season", "image_url", "score"}
         return [{k: v for k, v in _serialize(d).items() if k in slim_fields} for d in docs]
     except Exception as e:
