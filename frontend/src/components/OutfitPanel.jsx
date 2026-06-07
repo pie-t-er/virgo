@@ -61,6 +61,9 @@ export default function OutfitPanel({ items, candidates }) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [visualizing, setVisualizing] = useState(false);
+  const [vizImage, setVizImage] = useState(null);
+  const [vizError, setVizError] = useState(null);
 
   // Build the displayed item per type
   const displayedItems = items.map((item) => {
@@ -91,6 +94,31 @@ export default function OutfitPanel({ items, candidates }) {
 
   const allDecided = displayedItems.every((item) => accepted[item.type] === true);
   const anyAccepted = displayedItems.some((item) => accepted[item.type] === true);
+
+  async function visualizeOutfit() {
+    const acceptedItems = displayedItems.filter((item) => accepted[item.type] === true);
+    if (!acceptedItems.length) return;
+    setVisualizing(true);
+    setVizImage(null);
+    setVizError(null);
+    try {
+      const res = await fetch("/api/visualize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_ids: acceptedItems.map((i) => i._id) }),
+      });
+      const data = await res.json();
+      if (data.image) {
+        setVizImage(`data:image/png;base64,${data.image}`);
+      } else {
+        setVizError(data.error || "Could not generate visualization.");
+      }
+    } catch {
+      setVizError("Network error generating visualization.");
+    } finally {
+      setVisualizing(false);
+    }
+  }
 
   async function saveToCalendar(date, occasion) {
     const itemIds = displayedItems
@@ -194,13 +222,27 @@ export default function OutfitPanel({ items, candidates }) {
       </div>
 
       {anyAccepted && !showCalendar && (
-        <button
-          className="add-to-cal-btn"
-          onClick={() => setShowCalendar(true)}
-        >
-          📅 Add to calendar
-        </button>
+        <div className="outfit-action-row">
+          <button className="add-to-cal-btn" onClick={() => setShowCalendar(true)}>
+            📅 Add to calendar
+          </button>
+          <button
+            className="visualize-btn"
+            onClick={visualizeOutfit}
+            disabled={visualizing}
+          >
+            {visualizing ? "✨ Generating…" : "✨ Visualize"}
+          </button>
+        </div>
       )}
+
+      {vizImage && (
+        <div className="viz-result">
+          <div className="viz-label">AI outfit visualization</div>
+          <img src={vizImage} alt="Outfit visualization" className="viz-image" />
+        </div>
+      )}
+      {vizError && <p className="viz-error">{vizError}</p>}
 
       {showCalendar && (
         <CalendarPicker

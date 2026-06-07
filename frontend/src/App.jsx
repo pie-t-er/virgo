@@ -92,11 +92,14 @@ export default function App() {
 }
 
 function SetupModal({ onSave }) {
+  const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [gender, setGender] = useState("");
   const [saving, setSaving] = useState(false);
+  const [photos, setPhotos] = useState([]); // base64 strings
+  const [photoUploading, setPhotoUploading] = useState(false);
 
-  async function handleSave() {
+  async function handleProfileSave() {
     if (!gender) return;
     setSaving(true);
     const data = { name: name.trim(), gender };
@@ -106,47 +109,128 @@ function SetupModal({ onSave }) {
       body: JSON.stringify(data),
     });
     setSaving(false);
-    onSave(data);
+    setStep(2);
+  }
+
+  async function handlePhotoFiles(e) {
+    const files = Array.from(e.target.files).slice(0, 3);
+    setPhotoUploading(true);
+    const results = await Promise.all(
+      files.map(
+        (f) =>
+          new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              // Strip data URL prefix, keep only base64 payload
+              const b64 = ev.target.result.split(",")[1];
+              resolve(b64);
+            };
+            reader.readAsDataURL(f);
+          })
+      )
+    );
+    setPhotos(results);
+    setPhotoUploading(false);
+  }
+
+  async function handleFinish(skipPhotos = false) {
+    if (!skipPhotos && photos.length > 0) {
+      await fetch("/api/profile/photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photos }),
+      });
+    }
+    onSave({ name: name.trim(), gender });
+  }
+
+  if (step === 1) {
+    return (
+      <div className="modal-overlay">
+        <div className="modal">
+          <img src={logo} alt="Virgo" className="modal-logo-img" />
+          <h2>Welcome to Virgo</h2>
+          <p>Let's personalise your wardrobe experience.</p>
+
+          <div className="modal-field">
+            <label>Your name (optional)</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Alex"
+            />
+          </div>
+
+          <div className="modal-field">
+            <label>I wear</label>
+            <div className="gender-options">
+              {["men", "women"].map((g) => (
+                <button
+                  key={g}
+                  className={`gender-btn ${gender === g ? "active" : ""}`}
+                  onClick={() => setGender(g)}
+                >
+                  {g === "men" ? "Men's clothing" : "Women's clothing"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            className="modal-save"
+            onClick={handleProfileSave}
+            disabled={!gender || saving}
+          >
+            {saving ? "Saving…" : "Next →"}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="modal-overlay">
       <div className="modal">
         <img src={logo} alt="Virgo" className="modal-logo-img" />
-        <h2>Welcome to Virgo</h2>
-        <p>Let's personalise your wardrobe experience.</p>
+        <h2>Add reference photos</h2>
+        <p style={{ fontSize: "0.88rem", color: "var(--text2)", lineHeight: 1.5 }}>
+          Optional: upload 1–3 full-body photos of yourself. Virgo uses them
+          to generate personalized outfit visualizations.
+        </p>
 
         <div className="modal-field">
-          <label>Your name (optional)</label>
+          <label htmlFor="photo-upload" className="photo-upload-label">
+            {photoUploading
+              ? "Reading photos…"
+              : photos.length > 0
+              ? `${photos.length} photo${photos.length > 1 ? "s" : ""} selected ✓`
+              : "Choose photos (up to 3)"}
+          </label>
           <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Alex"
+            id="photo-upload"
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={handlePhotoFiles}
           />
         </div>
 
-        <div className="modal-field">
-          <label>I wear</label>
-          <div className="gender-options">
-            {["men", "women"].map((g) => (
-              <button
-                key={g}
-                className={`gender-btn ${gender === g ? "active" : ""}`}
-                onClick={() => setGender(g)}
-              >
-                {g === "men" ? "Men's clothing" : "Women's clothing"}
-              </button>
-            ))}
-          </div>
+        <div className="modal-btn-row">
+          <button
+            className="modal-skip"
+            onClick={() => handleFinish(true)}
+          >
+            Skip
+          </button>
+          <button
+            className="modal-save"
+            onClick={() => handleFinish(false)}
+            disabled={photoUploading}
+          >
+            {photos.length > 0 ? "Save & start" : "Start without photos"}
+          </button>
         </div>
-
-        <button
-          className="modal-save"
-          onClick={handleSave}
-          disabled={!gender || saving}
-        >
-          {saving ? "Saving…" : "Get started"}
-        </button>
       </div>
     </div>
   );

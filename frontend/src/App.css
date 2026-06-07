@@ -150,3 +150,39 @@
 
 .modal-save:hover:not(:disabled) { background: var(--accent); }
 .modal-save:disabled { opacity: 0.4; cursor: default; }
+
+.modal-btn-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+.modal-btn-row .modal-save { flex: 1; width: auto; }
+
+.modal-skip {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  border-radius: var(--radius-sm);
+  padding: 12px 20px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+.modal-skip:hover { color: var(--text); }
+
+.photo-upload-label {
+  display: block;
+  padding: 10px 16px;
+  background: rgba(167,139,250,0.08);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s;
+}
+.photo-upload-label:hover { background: rgba(167,139,250,0.16); }
