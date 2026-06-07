@@ -1,0 +1,34 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Build & deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: gen-lang-client-0357093237
+
+      - name: Deploy to Cloud Run (source deploy via Cloud Build)
+        run: |
+          gcloud run deploy virgo \
+            --source . \
+            --region us-central1 \
+            --allow-unauthenticated \
+            --port 8080 \
+            --set-env-vars "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }},MONGODB_DATABASE=wardrobe" \
+            --set-secrets "MONGODB_URI=MONGODB_URI:latest" \
+            --project gen-lang-client-0357093237 \
+            --quiet
