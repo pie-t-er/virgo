@@ -65,19 +65,21 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   text-align: center;
+  min-height: 100dvh;
   padding: 100px 24px 80px;
   overflow: hidden;
 }
 
 .hero-glow {
   position: absolute;
-  top: -80px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.2) 0%, transparent 70%);
+  transform: translate(-50%, -60%);
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.25) 0%, transparent 65%);
   pointer-events: none;
 }
 

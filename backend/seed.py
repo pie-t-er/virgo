@@ -68,9 +68,32 @@ ARTICLE_DEFAULT_OCCASIONS = {
 
 SEASON_BY_TYPE = {
     "outerwear": ["fall", "winter"],
-    "sweaters": ["fall", "winter", "spring"],
-    "shorts": ["spring", "summer"],
-    "dress": ["spring", "summer"],
+    "sweaters":  ["fall", "winter", "spring"],
+    "shorts":    ["spring", "summer"],
+    "dress":     ["spring", "summer"],
+}
+
+# Season keywords to scan in item names
+SEASON_KEYWORDS = {
+    "winter": ["wool", "fleece", "down", "puffer", "parka", "thermal", "cable knit",
+               "cashmere", "heavyweight", "cozy", "flannel", "sherpa"],
+    "summer": ["linen", "tank", "swim", "tropical", "resort", "lightweight", "breathable",
+               "seersucker", "chambray"],
+    "fall":   ["corduroy", "plaid", "tweed", "suede"],
+    "spring": ["floral", "pastel", "rain", "trench"],
+}
+
+# Temperature comfort ranges (°F) by article type
+TEMP_RANGE_BY_TYPE = {
+    "Jackets":  (None, 65),    # outerwear: wear below 65°F
+    "Sweaters": (None, 68),    # sweater: wear below 68°F
+    "Shirts":   (50, None),    # shirt: wear above 50°F
+    "Shorts":   (68, None),    # shorts: wear above 68°F
+    "Pants":    (None, None),  # pants: any temp
+    "Dresses":  (60, None),    # dress: wear above 60°F
+    "Skirts":   (60, None),
+    "Shoes":    (None, None),
+    "Hats":     (None, None),
 }
 
 
@@ -87,8 +110,21 @@ def infer_occasions(name: str, article: str) -> list[str]:
     return list(occasions)
 
 
-def infer_season(article: str) -> list[str]:
-    return SEASON_BY_TYPE.get(article.lower(), ["spring", "summer", "fall", "winter"])
+def infer_season(name: str, article: str) -> list[str]:
+    """Infer seasons from article type defaults + name keyword scan."""
+    seasons = set(SEASON_BY_TYPE.get(article.lower(), []))
+    name_lower = name.lower()
+    for season, kws in SEASON_KEYWORDS.items():
+        if any(kw in name_lower for kw in kws):
+            seasons.add(season)
+    # Outerwear/sweaters: if no specific season found, default to fall/winter
+    if article in ("Jackets", "Sweaters") and not seasons:
+        seasons = {"fall", "winter"}
+    # Lightweight items: if no specific season found, default to spring/summer
+    if article in ("Shorts", "Dresses", "Skirts") and not seasons:
+        seasons = {"spring", "summer"}
+    # Everything else with no signal: all seasons
+    return sorted(seasons) if seasons else ["spring", "summer", "fall", "winter"]
 
 
 # Color keywords to scan for in the item name.
@@ -125,7 +161,8 @@ def load_csv(path: Path, gender: str) -> list[dict]:
             image_url = row.get("image_url", "").strip()
             color = extract_colors_from_name(name)
             occasions = infer_occasions(name, article)
-            season = infer_season(article)
+            season = infer_season(name, article)
+            temp_min, temp_max = TEMP_RANGE_BY_TYPE.get(article, (None, None))
 
             color_phrase = " and ".join(color) if color != ["multicolor"] else ""
             desc_color = f"{color_phrase} " if color_phrase else ""
@@ -135,20 +172,23 @@ def load_csv(path: Path, gender: str) -> list[dict]:
                 f"suitable for {', '.join(occasions)} occasions."
             )
 
-            items.append(
-                {
-                    "name": name,
-                    "type": item_type,
-                    "color": color,
-                    "tags": tags,
-                    "occasion": occasions,
-                    "season": season,
-                    "brand": brand,
-                    "image_url": image_url,
-                    "description": description,
-                    "gender": gender,
-                }
-            )
+            item: dict = {
+                "name": name,
+                "type": item_type,
+                "color": color,
+                "tags": tags,
+                "occasion": occasions,
+                "season": season,
+                "brand": brand,
+                "image_url": image_url,
+                "description": description,
+                "gender": gender,
+            }
+            if temp_min is not None:
+                item["temp_min"] = temp_min
+            if temp_max is not None:
+                item["temp_max"] = temp_max
+            items.append(item)
     return items
 
 

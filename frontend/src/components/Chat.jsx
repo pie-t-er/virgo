@@ -18,13 +18,29 @@ const INITIAL_MESSAGE = {
 };
 
 
-export default function Chat({ onAgentAction }) {
+export default function Chat({ onAgentAction, prefill, onPrefillConsumed, carryItems = [], onCarryConsumed }) {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeModel, setActiveModel] = useState("");
-  const [copied, setCopied] = useState(null); // index of copied message
+  const [copied, setCopied] = useState(null);
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // When a prefill arrives, set input, focus, and select-all so user can type immediately
+  useEffect(() => {
+    if (prefill) {
+      setInput(prefill);
+      onPrefillConsumed?.();
+      setTimeout(() => {
+        const el = inputRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(el.value.length, el.value.length);
+        }
+      }, 50);
+    }
+  }, [prefill]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -59,11 +75,30 @@ export default function Chat({ onAgentAction }) {
         body: JSON.stringify({ message: userText }),
       });
       const data = await res.json();
+      // If carry items exist (e.g. from Accessorize), prepend them so the
+      // OutfitPanel shows the full outfit + the new accessories together.
+      const newItems = data.items || [];
+      const newCandidates = data.candidates || {};
+      let mergedItems = newItems;
+      let mergedCandidates = newCandidates;
+      if (carryItems.length > 0) {
+        const carryIds = new Set(carryItems.map((i) => i._id));
+        mergedItems = [
+          ...carryItems,
+          ...newItems.filter((i) => !carryIds.has(i._id)),
+        ];
+        const carryCandidates = carryItems.reduce(
+          (acc, item) => ({ ...acc, [item.type]: [item] }),
+          {}
+        );
+        mergedCandidates = { ...carryCandidates, ...newCandidates };
+        onCarryConsumed?.();
+      }
       setMessages((m) => [...m, {
         role: "assistant",
         text: data.response,
-        items: data.items || [],
-        candidates: data.candidates || {},
+        items: mergedItems,
+        candidates: mergedCandidates,
         userText,
       }]);
       if (data.model) setActiveModel(data.model);
@@ -95,14 +130,6 @@ export default function Chat({ onAgentAction }) {
 
   return (
     <div className="chat">
-      <div className="chat-toolbar">
-        {activeModel && (
-          <span className="model-badge">{activeModel.replace("models/", "")}</span>
-        )}
-        <button className="reset-btn" onClick={resetChat} disabled={loading}>
-          ↺ New chat
-        </button>
-      </div>
 
       <div className="chat-messages">
         {messages.map((msg, i) => (
@@ -127,30 +154,32 @@ export default function Chat({ onAgentAction }) {
                     candidates={msg.candidates || {}}
                   />
                 )}
-              </div>
 
-              {/* Message actions */}
-              {msg.role === "assistant" && (
-                <div className="msg-actions">
-                  <button
-                    className="msg-action-btn"
-                    onClick={() => copyMessage(msg.text, i)}
-                    title="Copy"
-                  >
-                    {copied === i ? "✓" : "⎘"}
-                  </button>
-                  {msg.userText && (
+                {/* Actions inside the bubble */}
+                {msg.role === "assistant" && (
+                  <div className="msg-actions">
+                    {i > 0 && (
                     <button
                       className="msg-action-btn"
-                      onClick={() => retry(msg.userText)}
-                      disabled={loading}
-                      title="Retry"
+                      onClick={() => copyMessage(msg.text, i)}
+                      title="Copy"
                     >
-                      ↺
+                      {copied === i ? "✓" : "⎘"}
                     </button>
-                  )}
-                </div>
-              )}
+                    )}
+                    {i > 0 && msg.userText && (
+                      <button
+                        className="msg-action-btn"
+                        onClick={() => retry(msg.userText)}
+                        disabled={loading}
+                        title="Retry"
+                      >
+                        ↺
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -176,7 +205,10 @@ export default function Chat({ onAgentAction }) {
       {messages.length === 1 && (
         <div className="suggestions">
           {SUGGESTIONS.map((s, i) => (
-            <button key={i} className="suggestion-chip" onClick={() => send(s)}>
+            <button key={i} className="suggestion-chip" onClick={() => {
+              setInput(s);
+              setTimeout(() => { inputRef.current?.focus(); }, 50);
+            }}>
               {s}
             </button>
           ))}
@@ -185,6 +217,7 @@ export default function Chat({ onAgentAction }) {
 
       <div className="chat-input-row">
         <textarea
+          ref={inputRef}
           className="chat-input"
           placeholder="Ask Virgo anything about your wardrobe…"
           value={input}

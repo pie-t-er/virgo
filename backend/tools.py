@@ -42,30 +42,44 @@ def _serialize(doc: dict) -> dict:
 def add_clothing_item(
     name: str,
     type: str,
-    color: list[str],
     tags: list[str],
-    occasion: list[str],
-    season: list[str],
+    color: list[str] | None = None,
+    occasion: list[str] | None = None,
+    season: list[str] | None = None,
     brand: str = "",
     image_url: str = "",
     description: str = "",
+    temp_min: int | None = None,
+    temp_max: int | None = None,
 ) -> dict:
-    """Add a new clothing item to the wardrobe. Returns the inserted item id."""
-    desc_for_embed = description or f"{name} {type} {' '.join(color)} {' '.join(tags)}"
+    """Add a new clothing item to the wardrobe. Returns the inserted item id.
+    tags: style/occasion/season labels (e.g. ['casual', 'summer']).
+    temp_min/temp_max: comfortable temperature range in °F."""
+    all_tags = list(tags or []) + list(occasion or []) + list(season or [])
+    # Auto-apply user's gender tag so the item appears in their filtered wardrobe
+    from backend.db import get_profile as _get_profile
+    _gender = _get_profile().get("gender", "")
+    if _gender and _gender not in all_tags:
+        all_tags.append(_gender)
+    desc_for_embed = description or f"{name} {type} {' '.join(all_tags)}"
     embedding = embed_text(desc_for_embed)
     doc = {
         "name": name,
         "type": type.lower(),
-        "color": color,
-        "tags": tags,
-        "occasion": occasion,
-        "season": season,
+        "color": color or [],
+        "tags": all_tags,
+        "occasion": occasion or tags or [],
+        "season": season or [],
         "brand": brand,
         "image_url": image_url,
         "description": desc_for_embed,
         "embedding": embedding,
         "created_at": datetime.datetime.utcnow(),
     }
+    if temp_min is not None:
+        doc["temp_min"] = temp_min
+    if temp_max is not None:
+        doc["temp_max"] = temp_max
     result = wardrobe_col().insert_one(doc)
     return {"id": str(result.inserted_id), "name": name}
 
@@ -102,7 +116,10 @@ def semantic_search(query: str, top_k: int = 8, item_type: str = "") -> list[dic
     Prefer this over get_wardrobe when looking for outfit recommendations.
     Pass item_type (e.g. 'top', 'bottom', 'shoes') to restrict results to one category."""
     from backend.db import get_profile
-    embedding = embed_text(query)
+    try:
+        embedding = embed_text(query)
+    except Exception as e:
+        return [{"error": f"Embedding service temporarily unavailable ({e}). Please try again in a moment."}]
 
     # Build post-filter for gender and optional type
     profile = get_profile()
@@ -197,7 +214,7 @@ def plan_outfit(
         "notes": notes,
         "created_at": datetime.datetime.utcnow(),
     }
-    calendar_col().replace_one({"date": dt}, doc, upsert=True)
+    calendar_col().insert_one(doc)
     return {"date": date, "day_label": doc["day_label"], "item_count": len(item_ids)}
 
 
@@ -217,8 +234,20 @@ def get_shopping_gaps() -> dict:
     Analyse the wardrobe against outfit templates and return missing item types
     along with a count of what the user already has per category.
     """
-    # count items by type
-    pipeline = [{"$group": {"_id": "$type", "count": {"$sum": 1}}}]
+    from backend.db import get_profile
+    profile = get_profile()
+    gender = profile.get("gender", "")
+
+    # count items by type, filtered to the user's gender (same logic as semantic_search)
+    match_stage: dict = {}
+    if gender:
+        match_stage = {"$match": {"tags": {"$in": [gender]}}}
+
+    pipeline = []
+    if match_stage:
+        pipeline.append(match_stage)
+    pipeline.append({"$group": {"_id": "$type", "count": {"$sum": 1}}})
+
     owned = {doc["_id"]: doc["count"] for doc in wardrobe_col().aggregate(pipeline)}
 
     templates = list(templates_col().find())
@@ -243,8 +272,100 @@ def get_shopping_gaps() -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# weather tool
+# --------------------------------------------------------------------------- #
+
+def get_weather(location: str, date: str = "") -> dict:
+    """
+    Get weather forecast for a location and optional date (YYYY-MM-DD).
+    Returns temperature in °F and conditions. Uses forecast data for dates
+    within 3 days; falls back to seasonal climate estimate beyond that.
+    location: city name (e.g. 'Tampa, FL', 'New York').
+    """
+    import calendar as cal_mod
+    import httpx as _httpx
+
+    # Seasonal fallback helper
+    def _seasonal(date_str: str, location: str) -> dict:
+        try:
+            dt = datetime.datetime.fromisoformat(date_str)
+        except Exception:
+            dt = datetime.datetime.utcnow()
+        month = dt.month
+        loc_lower = location.lower()
+        # Very rough climate zones
+        if any(w in loc_lower for w in ["fl", "florida", "miami", "tampa", "orlando",
+                                         "la", "los angeles", "san diego", "phoenix", "az",
+                                         "hawaii", "houston", "tx", "texas"]):
+            base = {12:65,1:65,2:67,3:72,4:78,5:84,6:90,7:92,8:92,9:88,10:80,11:72}
+        elif any(w in loc_lower for w in ["ny", "new york", "boston", "chicago", "il",
+                                           "pa", "philadelphia", "dc", "washington"]):
+            base = {12:35,1:32,2:35,3:45,4:55,5:67,6:77,7:83,8:81,9:72,10:60,11:48}
+        elif any(w in loc_lower for w in ["ca", "california", "san francisco", "seattle",
+                                           "portland", "wa", "oregon"]):
+            base = {12:52,1:50,2:53,3:57,4:60,5:65,6:70,7:72,8:73,9:70,10:63,11:55}
+        else:
+            base = {12:40,1:38,2:42,3:52,4:62,5:72,6:80,7:85,8:83,9:75,10:63,11:50}
+        avg_f = base.get(month, 65)
+        season = {12:"winter",1:"winter",2:"winter",3:"spring",4:"spring",5:"spring",
+                  6:"summer",7:"summer",8:"summer",9:"fall",10:"fall",11:"fall"}[month]
+        return {"temp_f": avg_f, "feels_like_f": avg_f, "condition": f"Seasonal estimate ({season})",
+                "source": "seasonal_estimate", "date": date_str or dt.strftime("%Y-%m-%d")}
+
+    # Check if date is within forecast range (~3 days)
+    target_dt = None
+    if date:
+        try:
+            target_dt = datetime.datetime.fromisoformat(date)
+        except Exception:
+            pass
+
+    days_ahead = (target_dt - datetime.datetime.utcnow()).days if target_dt else 0
+
+    if days_ahead > 3:
+        return _seasonal(date, location)
+
+    try:
+        url = f"https://wttr.in/{location.replace(' ', '+')}?format=j1"
+        resp = _httpx.get(url, timeout=8, follow_redirects=True)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # wttr.in weather_desc and temp_C for current or forecast
+        if days_ahead <= 0:
+            cur = data["current_condition"][0]
+            temp_c = float(cur["temp_C"])
+            feels_c = float(cur["FeelsLikeC"])
+            condition = cur["weatherDesc"][0]["value"]
+        else:
+            day_idx = min(days_ahead, len(data["weather"]) - 1)
+            day = data["weather"][day_idx]
+            temp_c = (float(day["mintempC"]) + float(day["maxtempC"])) / 2
+            feels_c = temp_c
+            condition = day["hourly"][4]["weatherDesc"][0]["value"]
+
+        def c_to_f(c): return round(c * 9 / 5 + 32)
+        return {
+            "temp_f": c_to_f(temp_c),
+            "feels_like_f": c_to_f(feels_c),
+            "condition": condition,
+            "source": "wttr.in",
+            "date": date or datetime.datetime.utcnow().strftime("%Y-%m-%d"),
+        }
+    except Exception:
+        return _seasonal(date or datetime.datetime.utcnow().strftime("%Y-%m-%d"), location)
+
+
+# --------------------------------------------------------------------------- #
 # ADK FunctionTool wrappers
 # --------------------------------------------------------------------------- #
+
+def set_user_location(location: str) -> dict:
+    """Save the user's location to their profile so it persists across sessions."""
+    from backend.db import save_profile
+    save_profile({"location": location})
+    return {"saved": True, "location": location}
+
 
 ALL_TOOLS = [
     FunctionTool(add_clothing_item),
@@ -255,4 +376,6 @@ ALL_TOOLS = [
     FunctionTool(plan_outfit),
     FunctionTool(remove_calendar_entry),
     FunctionTool(get_shopping_gaps),
+    FunctionTool(get_weather),
+    FunctionTool(set_user_location),
 ]

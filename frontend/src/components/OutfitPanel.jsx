@@ -48,7 +48,12 @@ function fmtLabel(d) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-export default function OutfitPanel({ items, candidates }) {
+export default function OutfitPanel({ items: rawItems, candidates }) {
+  // Deduplicate by type — keep first occurrence per type
+  const items = rawItems.filter(
+    (item, idx, arr) => arr.findIndex((i) => i.type === item.type) === idx
+  );
+
   // Track current index per type within the candidate pool
   const [indices, setIndices] = useState(() => {
     const init = {};
@@ -58,6 +63,8 @@ export default function OutfitPanel({ items, candidates }) {
 
   // accepted: true = kept, false = rejected, undefined = undecided
   const [accepted, setAccepted] = useState({});
+  // removed: types the user explicitly dismissed from the outfit
+  const [removed, setRemoved] = useState(new Set());
   const [showCalendar, setShowCalendar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -65,12 +72,19 @@ export default function OutfitPanel({ items, candidates }) {
   const [vizImage, setVizImage] = useState(null);
   const [vizError, setVizError] = useState(null);
 
-  // Build the displayed item per type
-  const displayedItems = items.map((item) => {
-    const pool = candidates[item.type] ?? [item];
-    const idx = indices[item.type] ?? 0;
-    return pool[idx] ?? item;
-  });
+  function remove(type) {
+    setRemoved((prev) => new Set([...prev, type]));
+    setAccepted((prev) => { const n = { ...prev }; delete n[type]; return n; });
+  }
+
+  // Build the displayed item per type, excluding removed types
+  const displayedItems = items
+    .filter((item) => !removed.has(item.type))
+    .map((item) => {
+      const pool = candidates[item.type] ?? [item];
+      const idx = indices[item.type] ?? 0;
+      return pool[idx] ?? item;
+    });
 
   function swap(type) {
     const pool = candidates[type] ?? [];
@@ -121,16 +135,19 @@ export default function OutfitPanel({ items, candidates }) {
   }
 
   async function saveToCalendar(date, occasion) {
-    const itemIds = displayedItems
-      .filter((item) => accepted[item.type] === true)
-      .map((item) => item._id);
-    if (!itemIds.length) return;
+    const acceptedItems = displayedItems.filter((item) => accepted[item.type] === true);
+    if (!acceptedItems.length) return;
     setSaving(true);
-    await fetch("/api/chat", {
+    // Strip the data-URL prefix before storing — backend re-adds it on read
+    const imageB64 = vizImage ? vizImage.replace(/^data:[^;]+;base64,/, "") : "";
+    await fetch("/api/calendar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: `Plan outfit for ${date} for ${occasion || "a casual occasion"} using item ids: ${itemIds.join(", ")}`,
+        date,
+        occasion,
+        item_ids: acceptedItems.map((i) => i._id),
+        visualization_image: imageB64,
       }),
     });
     setSaving(false);
@@ -173,20 +190,16 @@ export default function OutfitPanel({ items, candidates }) {
               <div className="oi-info">
                 <p className="oi-name">{item.name}</p>
                 <div className="oi-meta">
-                  {(Array.isArray(item.color) ? item.color : [item.color])
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((c) => (
-                      <span
-                        key={c}
-                        className="oi-color-dot"
-                        style={{ background: colorStyle(c) }}
-                        title={c}
-                      />
-                    ))}
                   <span className="oi-type">{item.type}</span>
                 </div>
                 {item.brand && <p className="oi-brand">{item.brand}</p>}
+                {item.occasion?.length > 0 && (
+                  <div className="oi-tags">
+                    {item.occasion.slice(0, 2).map((o) => (
+                      <span key={o} className="oi-tag">{o}</span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="oi-actions">
@@ -201,7 +214,7 @@ export default function OutfitPanel({ items, candidates }) {
                 )}
                 {hasAlts && (
                   <button className="oi-btn swap" onClick={() => swap(item.type)} title="Try another">
-                    ↺
+                    →
                   </button>
                 )}
               </div>
@@ -233,6 +246,28 @@ export default function OutfitPanel({ items, candidates }) {
           >
             {visualizing ? "✨ Generating…" : "✨ Visualize"}
           </button>
+          {/* Hide Accessorize once an accessory is already in the accepted outfit */}
+          {!displayedItems.some(
+            (item) => item.type === "accessory" && accepted[item.type] === true
+          ) && (
+            <button
+              className="accessorize-btn"
+              onClick={() => {
+                const acceptedItems = displayedItems.filter(
+                  (item) => accepted[item.type] === true
+                );
+                const names = acceptedItems.map((item) => item.name).join(", ");
+                window.dispatchEvent(new CustomEvent("virgo:prefill-chat", {
+                  detail: {
+                    text: `What accessories from my wardrobe would go well with this outfit: ${names}?`,
+                    carryItems: acceptedItems,
+                  },
+                }));
+              }}
+            >
+              💍 Accessorize
+            </button>
+          )}
         </div>
       )}
 

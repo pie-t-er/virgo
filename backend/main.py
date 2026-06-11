@@ -33,6 +33,8 @@ from backend.visualize import generate_outfit_visualization
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_state()
+    # One-time idempotent cleanup: remove "multicolor" fallback labels seeded from CSV
+    wardrobe_col().update_many({}, {"$pull": {"color": "multicolor", "tags": "multicolor"}})
     yield
 
 
@@ -86,6 +88,18 @@ async def reset_session():
     """Clear conversation history; keep current model."""
     await get_state().reset()
     return {"status": "reset"}
+
+
+@api.post("/demo/reset")
+async def demo_reset():
+    """Full demo reset: wipe profile, calendar entries, and agent session."""
+    from backend.db import profile_col
+    # Wipe entire profile so onboarding runs fresh
+    profile_col().delete_one({"_id": "demo_user"})
+    # Clear all calendar entries
+    calendar_col().delete_many({})
+    await get_state().reset(rebuild=True)
+    return {"status": "demo_reset"}
 
 
 @api.get("/profile")
@@ -152,8 +166,63 @@ def get_calendar(
             if item:
                 items.append(_serialize(item))
         entry["items"] = items
+        # Prefix stored base64 so the frontend can use it directly as a src
+        if entry.get("visualization_image"):
+            entry["visualization_image"] = (
+                "data:image/png;base64," + entry["visualization_image"]
+            )
         results.append(entry)
     return results
+
+
+class CalendarSaveRequest(BaseModel):
+    date: str                        # YYYY-MM-DD
+    occasion: str = ""
+    item_ids: list[str] = []
+    visualization_image: str = ""    # base64, no data-URL prefix
+
+
+@api.post("/calendar")
+def save_calendar_entry(req: CalendarSaveRequest):
+    """Save an outfit to the calendar.
+    If a visualization is included and an entry for the same date already has
+    the same item set, update that entry in-place instead of inserting a duplicate.
+    """
+    dt = datetime.datetime.fromisoformat(req.date)
+    item_ids = []
+    for raw_id in req.item_ids:
+        try:
+            item_ids.append(ObjectId(raw_id))
+        except Exception:
+            pass
+
+    # If a visualization is being saved, check for an existing entry with the same items
+    if req.visualization_image and item_ids:
+        new_set = {str(i) for i in item_ids}
+        for entry in calendar_col().find({"date": dt}):
+            existing_set = {str(i) for i in entry.get("items", [])}
+            if existing_set == new_set:
+                calendar_col().update_one(
+                    {"_id": entry["_id"]},
+                    {"$set": {
+                        "visualization_image": req.visualization_image,
+                        **({"occasion": req.occasion} if req.occasion else {}),
+                    }},
+                )
+                return {"status": "updated", "_id": str(entry["_id"])}
+
+    doc: dict = {"date": dt, "occasion": req.occasion, "items": item_ids}
+    if req.visualization_image:
+        doc["visualization_image"] = req.visualization_image
+    result = calendar_col().insert_one(doc)
+    return {"status": "ok", "_id": str(result.inserted_id)}
+
+
+@api.delete("/calendar/entry/{entry_id}")
+def delete_calendar_entry_by_id(entry_id: str):
+    """Delete a specific outfit entry by its MongoDB _id."""
+    result = calendar_col().delete_one({"_id": ObjectId(entry_id)})
+    return {"deleted": result.deleted_count > 0}
 
 
 @api.delete("/calendar/{date}")
@@ -166,6 +235,7 @@ def delete_calendar_entry(date: str):
 @api.post("/visualize")
 async def visualize_outfit(req: VisualizeRequest):
     """Generate an outfit visualization image using Gemini."""
+    import asyncio
     from bson import ObjectId as ObjId
     items = []
     for item_id in req.item_ids:
@@ -177,13 +247,15 @@ async def visualize_outfit(req: VisualizeRequest):
             pass
 
     if not items:
-        return {"error": "No valid items found"}, 400
+        return {"error": "No valid items found"}
 
     profile = get_profile()
-    reference_photos = profile.get("reference_photos", [])
+    reference_photos = profile.get("reference_photos") or None
 
     try:
-        image_b64 = generate_outfit_visualization(items, reference_photos or None)
+        image_b64 = await asyncio.to_thread(
+            generate_outfit_visualization, items, reference_photos
+        )
         return {"image": image_b64}
     except Exception as e:
         return {"error": str(e)}
@@ -201,6 +273,64 @@ def get_reference_photos():
     profile = get_profile()
     photos = profile.get("reference_photos", [])
     return {"count": len(photos), "has_photos": len(photos) > 0}
+
+
+class WardrobeAddRequest(BaseModel):
+    name: str
+    type: str
+    brand: str = ""
+    tags: list = []
+    temp_min: int | None = None
+    temp_max: int | None = None
+    image_url: str = ""
+
+
+@api.post("/wardrobe")
+async def add_wardrobe_item(req: WardrobeAddRequest):
+    """Directly add a clothing item — bypasses the agent, handles embedding server-side."""
+    import asyncio
+    import datetime
+    from backend.embeddings import embed_text
+
+    profile = get_profile()
+    gender = profile.get("gender", "")
+
+    all_tags = list(req.tags)
+    if gender and gender not in all_tags:
+        all_tags.append(gender)
+    if req.type.lower() not in all_tags:
+        all_tags.append(req.type.lower())
+
+    description = (
+        f"{req.name} by {req.brand}. A {req.type} suitable for {', '.join(req.tags)} occasions."
+        if req.tags
+        else f"{req.name}. A {req.type}."
+    )
+
+    def _insert():
+        embedding = embed_text(description)
+        doc: dict = {
+            "name": req.name,
+            "type": req.type.lower(),
+            "color": [],
+            "tags": all_tags,
+            "occasion": req.tags,
+            "season": [],
+            "brand": req.brand,
+            "image_url": req.image_url,
+            "description": description,
+            "embedding": embedding,
+            "created_at": datetime.datetime.utcnow(),
+        }
+        if req.temp_min is not None:
+            doc["temp_min"] = req.temp_min
+        if req.temp_max is not None:
+            doc["temp_max"] = req.temp_max
+        result = wardrobe_col().insert_one(doc)
+        return str(result.inserted_id)
+
+    item_id = await asyncio.to_thread(_insert)
+    return {"id": item_id, "name": req.name}
 
 
 @api.delete("/wardrobe/{item_id}")

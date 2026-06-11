@@ -1,9 +1,10 @@
 .settings {
   flex: 1;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: center;
   padding: 40px 24px;
+  gap: 24px;
   overflow-y: auto;
 }
 
@@ -98,4 +99,44 @@
   font-size: 0.82rem;
   color: var(--green);
   line-height: 1.4;
+}
+
+.settings-card--danger {
+  border-color: rgba(248,113,113,0.25);
+}
+
+.settings-reset-btn {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid #f87171;
+  border-radius: var(--radius-sm);
+  color: #f87171;
+  font-size: 0.88rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.15s, opacity 0.15s;
+}
+.settings-reset-btn:hover:not(:disabled) { background: rgba(248,113,113,0.1); }
+.settings-reset-btn:disabled { opacity: 0.4; cursor: default; }
+
+.settings-photo-label {
+  display: inline-block;
+  padding: 10px 20px;
+  background: rgba(167,139,250,0.1);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.15s;
+}
+.settings-photo-label:hover { background: rgba(167,139,250,0.2); }
+
+.settings-photo-badge {
+  color: var(--accent);
+  font-weight: 500;
 }

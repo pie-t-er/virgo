@@ -23,6 +23,18 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [showSetup, setShowSetup] = useState(false);
 
+  // ?fresh=1 → wipe demo state so onboarding reruns
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("fresh") === "1") {
+      sessionStorage.removeItem("virgo_entered");
+      fetch("/api/demo/reset", { method: "POST" }).finally(() => {
+        window.history.replaceState({}, "", window.location.pathname);
+        window.location.reload();
+      });
+    }
+  }, []);
+
   // All hooks must be declared before any conditional returns
   useEffect(() => {
     if (showLanding) return;
@@ -44,8 +56,29 @@ export default function App() {
     setShowLanding(true);
   }
 
+  const [chatPrefill, setChatPrefill] = useState("");
+  const [chatCarryItems, setChatCarryItems] = useState([]);
+  const [chatResetKey, setChatResetKey] = useState(0);
   const onAgentAction = () => setRefreshKey((k) => k + 1);
   const onProfileSave = (p) => { setProfile(p); setShowSetup(false); };
+
+  function goToChat(prefill, carryItems = []) {
+    setChatPrefill(prefill);
+    setChatCarryItems(carryItems);
+    setActiveTab("chat");
+  }
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (typeof e.detail === "string") {
+        goToChat(e.detail);
+      } else {
+        goToChat(e.detail.text, e.detail.carryItems || []);
+      }
+    };
+    window.addEventListener("virgo:prefill-chat", handler);
+    return () => window.removeEventListener("virgo:prefill-chat", handler);
+  }, []);
 
   if (showLanding) {
     return <Landing onEnter={enterApp} />;
@@ -68,7 +101,15 @@ export default function App() {
             <button
               key={t.id}
               className={`tab-btn ${activeTab === t.id ? "active" : ""}`}
-              onClick={() => setActiveTab(t.id)}
+              onClick={() => {
+                if (t.id === "chat" && activeTab === "chat") {
+                  // Re-clicking Chat tab resets the conversation
+                  fetch("/api/reset", { method: "POST" });
+                  setChatResetKey((k) => k + 1);
+                } else {
+                  setActiveTab(t.id);
+                }
+              }}
             >
               {t.label}
             </button>
@@ -80,9 +121,9 @@ export default function App() {
       {showSetup && <SetupModal onSave={onProfileSave} />}
 
       <main className="app-main">
-        {activeTab === "chat" && <Chat onAgentAction={onAgentAction} />}
+        {activeTab === "chat" && <Chat key={chatResetKey} onAgentAction={onAgentAction} prefill={chatPrefill} onPrefillConsumed={() => setChatPrefill("")} carryItems={chatCarryItems} onCarryConsumed={() => setChatCarryItems([])} />}
         {activeTab === "wardrobe" && <WardrobeGrid refreshKey={refreshKey} />}
-        {activeTab === "calendar" && <CalendarView refreshKey={refreshKey} />}
+        {activeTab === "calendar" && <CalendarView refreshKey={refreshKey} onPlanDay={goToChat} />}
         {activeTab === "settings" && (
           <Settings profile={profile} onSave={onProfileSave} />
         )}
@@ -95,6 +136,8 @@ function SetupModal({ onSave }) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [gender, setGender] = useState("");
+  const [location, setLocation] = useState("");
+  const [tempUnit, setTempUnit] = useState("F");
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState([]); // base64 strings
   const [photoUploading, setPhotoUploading] = useState(false);
@@ -102,7 +145,7 @@ function SetupModal({ onSave }) {
   async function handleProfileSave() {
     if (!gender) return;
     setSaving(true);
-    const data = { name: name.trim(), gender };
+    const data = { name: name.trim(), gender, location: location.trim(), temp_unit: tempUnit };
     await fetch("/api/profile", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -141,7 +184,7 @@ function SetupModal({ onSave }) {
         body: JSON.stringify({ photos }),
       });
     }
-    onSave({ name: name.trim(), gender });
+    onSave({ name: name.trim(), gender, location: location.trim(), temp_unit: tempUnit });
   }
 
   if (step === 1) {
@@ -171,6 +214,30 @@ function SetupModal({ onSave }) {
                   onClick={() => setGender(g)}
                 >
                   {g === "men" ? "Men's clothing" : "Women's clothing"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="modal-field">
+            <label>Your city (optional)</label>
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="e.g. Tampa, FL"
+            />
+          </div>
+
+          <div className="modal-field">
+            <label>Temperature preference</label>
+            <div className="gender-options">
+              {["F", "C"].map((u) => (
+                <button
+                  key={u}
+                  className={`gender-btn ${tempUnit === u ? "active" : ""}`}
+                  onClick={() => setTempUnit(u)}
+                >
+                  °{u}
                 </button>
               ))}
             </div>
