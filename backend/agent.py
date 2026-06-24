@@ -49,7 +49,14 @@ STRICT RULES — follow these exactly:
 - If a tool returns fewer items than needed for a complete outfit, tell the user which piece is missing from their wardrobe rather than inventing one.
 - ALWAYS use semantic_search to find items — it searches the actual wardrobe database. Never assume what the user owns.
 - Only use get_wardrobe when the user explicitly asks to browse by type (e.g. "show me all my shoes") — always pass a type filter.
-- When planning calendar outfits, first call get_calendar for the current week to check for repeats. When planning outfits for multiple days at once (a full week, several days): (1) Strongly prefer not to reuse the same top or bottom across two different days — use a different style/occasion angle for each day's semantic_search calls (e.g. "smart casual Monday", "relaxed weekend", "sporty active day", "evening out look") so the results differ. (2) If the wardrobe is too small to avoid reuse entirely, it is acceptable to reuse a piece rather than skip an outfit — note the limitation briefly and suggest adding more items. Always plan SOMETHING for each day rather than skipping days entirely. (3) Confirm the full plan briefly in text only — do NOT append a standalone outfit recommendation or list items as "here's what to wear today." The calendar view already displays the saved outfits.
+- Outfit variety rule for calendar planning (single day or multiple — applies unless the user's prompt explicitly asks to repeat or wear something specific). Before planning, call get_calendar starting 3 days before the earliest date you're planning through the latest date you're planning, so you can see nearby history, not just the target week. Priority order:
+  1. Cohesion comes first — always assemble the most stylistically coherent outfit for the occasion/weather, even if that means reusing a piece. Never sacrifice cohesion for variety.
+  2. Hard rule: never reuse the exact same item (top, bottom, shoes, outerwear, accessory) for a date that falls within 3 days of another date where get_calendar shows that item was already used.
+  3. Beyond that 3-day window, still prefer not to repeat the same item across the days you're planning — use a different style/occasion angle per day's semantic_search calls (e.g. "smart casual Monday", "relaxed weekend", "sporty active day", "evening out look") so results differ.
+  4. When multiple candidates for a slot are equally cohesive, prefer whichever item appears least often (or not at all) in the get_calendar history you pulled — this rotates underused pieces back into use.
+  5. If the wardrobe is too small to satisfy rule 2 within the 3-day window, it's acceptable to reuse a piece rather than skip a day — note the limitation briefly and suggest adding more items. Always plan SOMETHING for each day rather than skipping days entirely.
+  6. Before calling plan_outfit for any of the days, compare your full draft (every item picked for every day) against itself: if two different days ended up with the exact same top+bottom+shoes combination, that's a duplicate outfit even if it satisfies rule 2 — change at least one piece on the later day (pick a different candidate already returned by your searches, or run one more semantic_search with a more distinct angle) before saving either one.
+  Confirm the full plan briefly in text only — do NOT append a standalone outfit recommendation or list items as "here's what to wear today." The calendar view already displays the saved outfits.
 - Keep responses concise and friendly. Use bullet points for outfit recommendations.
 - Reference item names exactly as returned by tools (e.g. "Khaki Pants by Dockers" not "some khaki trousers").
 - If the user asks to add an item, call add_clothing_item immediately with the details provided.
@@ -59,9 +66,10 @@ STRICT RULES — follow these exactly:
 - When the user asks about wardrobe gaps, missing pieces, or what to buy next, perform a FULL gap analysis. End your response after the analysis — do NOT suggest or recommend any specific outfits or item combinations at the end. Gap analysis responses are shopping/planning advice only.
   1. Call get_shopping_gaps to check which clothing types are missing from their wardrobe.
   2. Call get_wardrobe three times — once filtered by occasion "formal", once by "work", once by "casual" — to audit occasion coverage. If any occasion has fewer than 2 complete outfits worth of items, flag it as a style gap.
-  3. Look for cohesion mismatches: e.g. the user has 8 casual tops but only 1 pair of casual shoes — the shoes are a bottleneck. Or they have formal shirts but no dress shoes. Name specific imbalances like this.
+  3. Look for cohesion mismatches: e.g. the user has 8 casual tops but only 1 pair of casual shoes — the shoes are a bottleneck. Or they have formal shirts but no dress shoes. Name specific imbalances like this. Also call get_wardrobe filtered by type "bottom" and scan the item names for length/silhouette cues (shorts, pants/trousers/slacks, jeans, joggers, skirt). If one length dominates the bottoms, flag it as a cohesion gap — the user can't dress for cooler weather or more formal settings without bottoms of another length.
   4. Check seasonal gaps: if no outerwear exists for fall/winter, flag it.
-  5. Summarize findings in sections: **Structural Gaps** (missing types), **Occasion Gaps** (underserved styles), **Cohesion Gaps** (items with no matching partners). Always be specific — name the actual counts and the specific missing piece, not vague advice.
+  5. Summarize findings in sections: **Structural Gaps** (missing types), **Occasion Gaps** (underserved styles), **Cohesion Gaps** (items with no matching partners, including any length/silhouette imbalance within a type). Always speak in concrete numbers — exact counts, fractions (e.g. "4 of 5"), and percentages — never vague terms like "many", "a few", or "significant".
+  6. End with a short **Bottom Line** summary (2-3 sentences) naming the specific piece types (not outfit combinations) that would most improve the wardrobe, in priority order — e.g. "A pair of dress shoes and a formal blazer would unlock complete formal outfits; a second pair of work bottoms would also help." This is a purchase-priority summary, not an outfit recommendation.
 - TRUST ALL TOOL RESULTS COMPLETELY. Never apologise for, question, or cast doubt on what a tool returns. Never say the tool "might not be accurate" or ask the user to manually correct tool output. If a tool says the wardrobe has X items of a type, present that as fact.
 - Never ask the user to describe their own wardrobe — always use tools to look it up.
 - When the user asks to visualize an outfit (e.g. "visualize what I'm wearing today", "show me what this looks like"), call get_calendar to find the relevant day's outfit, then list those items by name in your response. An outfit panel with a Visualize button will automatically appear in the UI for the user to click — tell them to click the ✨ Visualize button that appears below your message.
@@ -194,6 +202,7 @@ async def run_turn(user_message: str) -> dict:
             surfaced_items: list[dict] = []
             seen_ids: set[str] = set()
             tools_called: set[str] = set()
+            tools_call_counts: dict[str, int] = {}
 
             async for event in state.runner.run_async(
                 user_id="demo_user",
@@ -214,7 +223,9 @@ async def run_turn(user_message: str) -> dict:
                 ):
                     for part in event.content.parts:
                         if part.function_call:
-                            tools_called.add(part.function_call.name)
+                            name = part.function_call.name
+                            tools_called.add(name)
+                            tools_call_counts[name] = tools_call_counts.get(name, 0) + 1
 
                 # Harvest wardrobe items from tool responses
                 # ADK uses role="user" for function responses (not "tool")
@@ -262,9 +273,15 @@ async def run_turn(user_message: str) -> dict:
                 "outfit for saturday", "outfit for sunday",
             )
             _is_planning_msg = any(kw in _msg_lower for kw in _planning_keywords)
-            _suppress_panel = bool(
-                tools_called & {"plan_outfit", "get_shopping_gaps"}
-            ) or (_is_planning_msg and "semantic_search" in tools_called)
+            _suppress_panel = (
+                # Gap analysis — always suppress
+                "get_shopping_gaps" in tools_called
+                # Multi-day week plan — plan_outfit called more than once
+                or tools_call_counts.get("plan_outfit", 0) > 1
+                # Planning message + search but plan_outfit never reached
+                or (_is_planning_msg and "semantic_search" in tools_called
+                    and "plan_outfit" not in tools_called)
+            )
 
             if _suppress_panel:
                 selected_items: list[dict] = []

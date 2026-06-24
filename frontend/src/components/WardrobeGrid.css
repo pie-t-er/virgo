@@ -123,6 +123,10 @@
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  /* auto-sized rows mis-measure when a child uses aspect-ratio (Chromium
+     computes the row height before column widths are final) — max-content
+     forces it to size from the card's actual content instead. */
+  grid-auto-rows: max-content;
   gap: 14px;
   align-content: start;
 }
@@ -154,7 +158,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center top;
+  object-position: center center;
   display: block;
 }
 
@@ -406,6 +410,20 @@
 }
 .btn-cancel:hover { border-color: var(--text); color: var(--text); }
 
+.btn-edit {
+  background: rgba(167,139,250,0.1);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-edit:hover { background: rgba(167,139,250,0.2); }
+
 .btn-save {
   background: var(--accent2);
   border: none;
@@ -642,5 +660,10 @@
   display: flex;
   justify-content: space-between;
   gap: 16px;
+}
+
+.item-detail-footer-left {
+  display: flex;
+  gap: 10px;
 }
 

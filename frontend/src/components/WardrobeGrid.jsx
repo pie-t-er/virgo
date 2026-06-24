@@ -53,6 +53,7 @@ export default function WardrobeGrid({ refreshKey }) {
   const [tempUnit, setTempUnit] = useState("F");
   const [showAdd, setShowAdd]   = useState(false);
   const [detailItem, setDetailItem] = useState(null);
+  const [editItem, setEditItem] = useState(null);
 
   useEffect(() => {
     fetch("/api/profile")
@@ -103,6 +104,32 @@ export default function WardrobeGrid({ refreshKey }) {
     });
     if (res.ok) {
       setShowAdd(false);
+      const params = new URLSearchParams();
+      if (typeFilter !== "all") params.set("type", typeFilter);
+      if (gender) params.set("gender", gender);
+      fetch(`/api/wardrobe?${params}`)
+        .then((r) => r.json())
+        .then(setItems);
+    }
+  }
+
+  async function handleEdit(formData) {
+    const body = {
+      name: formData.name,
+      type: formData.type,
+      brand: formData.brand,
+      tags: formData.tags,
+      temp_min: formData.tempMin !== "" ? parseInt(formData.tempMin, 10) : null,
+      temp_max: formData.tempMax !== "" ? parseInt(formData.tempMax, 10) : null,
+      image_url: formData.imageDataUrl || "",
+    };
+    const res = await fetch(`/api/wardrobe/${editItem._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      setEditItem(null);
       const params = new URLSearchParams();
       if (typeFilter !== "all") params.set("type", typeFilter);
       if (gender) params.set("gender", gender);
@@ -171,12 +198,13 @@ export default function WardrobeGrid({ refreshKey }) {
         </div>
       )}
 
-      {showAdd && (
+      {(showAdd || editItem) && (
         <AddItemModal
           gender={gender}
           tempUnit={tempUnit}
-          onSave={handleAdd}
-          onClose={() => setShowAdd(false)}
+          editItem={editItem}
+          onSave={editItem ? handleEdit : handleAdd}
+          onClose={() => { setShowAdd(false); setEditItem(null); }}
         />
       )}
 
@@ -185,6 +213,7 @@ export default function WardrobeGrid({ refreshKey }) {
           item={detailItem}
           onClose={() => setDetailItem(null)}
           onDelete={() => deleteItem(detailItem._id)}
+          onEdit={() => { setEditItem(detailItem); setDetailItem(null); }}
           onBuildOutfit={(item, prompt) => {
             setDetailItem(null);
             // Carry the anchor item so the outfit panel always includes it,
@@ -236,7 +265,7 @@ function ItemCard({ item, onDelete, onDetail }) {
 }
 
 // ── Item detail modal ─────────────────────────────────────
-function ItemDetailModal({ item, onClose, onDelete, onBuildOutfit }) {
+function ItemDetailModal({ item, onClose, onDelete, onEdit, onBuildOutfit }) {
   const [imgErr, setImgErr] = useState(false);
   const allTags = [
     ...(item.occasion || []),
@@ -284,9 +313,14 @@ function ItemDetailModal({ item, onClose, onDelete, onBuildOutfit }) {
         </div>
 
         <div className="item-detail-footer">
-          <button className="btn-cancel" onClick={() => { onDelete(); onClose(); }}>
-            🗑 Remove
-          </button>
+          <div className="item-detail-footer-left">
+            <button className="btn-edit" onClick={onEdit}>
+              ✎ Edit
+            </button>
+            <button className="btn-cancel" onClick={() => { onDelete(); onClose(); }}>
+              🗑 Remove
+            </button>
+          </div>
           <button
             className="btn-save"
             onClick={() => onBuildOutfit(item, `Build an outfit around my ${item.name}${item.brand ? ` by ${item.brand}` : ""}`)}
@@ -309,16 +343,35 @@ function DetailRow({ label, value, capitalize }) {
   );
 }
 
-// ── Add item modal ────────────────────────────────────────
-function AddItemModal({ gender, tempUnit, onSave, onClose }) {
+// Stored temp_min/temp_max are always °F — convert back to the display unit when editing
+function fToDisplayUnit(value, unit) {
+  if (value == null) return "";
+  return String(unit === "C" ? Math.round((value - 32) * 5 / 9) : value);
+}
+
+// ── Add / Edit item modal ──────────────────────────────────
+function AddItemModal({ gender, tempUnit, editItem, onSave, onClose }) {
   const TEMP_PRESETS = tempUnit === "C" ? TEMP_PRESETS_C : TEMP_PRESETS_F;
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: "", type: "top", brand: "",
-    tags: [], tempPreset: "", tempMin: "", tempMax: "",
-    imageDataUrl: "",
-  });
-  const [imgPreview, setImgPreview] = useState(null);
+  const [form, setForm] = useState(() =>
+    editItem
+      ? {
+          name: editItem.name || "",
+          type: editItem.type || "top",
+          brand: editItem.brand || "",
+          tags: editItem.occasion || [],
+          tempPreset: editItem.temp_min != null || editItem.temp_max != null ? "custom" : "",
+          tempMin: fToDisplayUnit(editItem.temp_min, tempUnit),
+          tempMax: fToDisplayUnit(editItem.temp_max, tempUnit),
+          imageDataUrl: editItem.image_url || "",
+        }
+      : {
+          name: "", type: "top", brand: "",
+          tags: [], tempPreset: "", tempMin: "", tempMax: "",
+          imageDataUrl: "",
+        }
+  );
+  const [imgPreview, setImgPreview] = useState(editItem?.image_url || null);
   const [customTag, setCustomTag] = useState("");
   const fileRef = useRef(null);
 
@@ -379,7 +432,7 @@ function AddItemModal({ gender, tempUnit, onSave, onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="add-modal" onClick={(e) => e.stopPropagation()}>
         <div className="add-modal-header">
-          <h2>Add clothing item</h2>
+          <h2>{editItem ? "Edit clothing item" : "Add clothing item"}</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
@@ -525,7 +578,9 @@ function AddItemModal({ gender, tempUnit, onSave, onClose }) {
             onClick={handleSave}
             disabled={!form.name || saving}
           >
-            {saving ? "Adding…" : "Add to wardrobe"}
+            {editItem
+              ? (saving ? "Saving…" : "Save changes")
+              : (saving ? "Adding…" : "Add to wardrobe")}
           </button>
         </div>
       </div>

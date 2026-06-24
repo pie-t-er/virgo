@@ -5,7 +5,7 @@
  *   items      — initially selected items [{_id, name, type, color, image_url, brand}]
  *   candidates — full pool grouped by type { top: [...], bottom: [...], shoes: [...] }
  */
-import { useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import "./OutfitPanel.css";
 
 const TYPE_ICONS = {
@@ -48,7 +48,7 @@ function fmtLabel(d) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
-export default function OutfitPanel({ items: rawItems, candidates }) {
+export default function OutfitPanel({ items: rawItems, candidates, onAccessorize, busy }) {
   // Deduplicate by type — keep first occurrence per type
   const items = rawItems.filter(
     (item, idx, arr) => arr.findIndex((i) => i.type === item.type) === idx
@@ -71,6 +71,21 @@ export default function OutfitPanel({ items: rawItems, candidates }) {
   const [visualizing, setVisualizing] = useState(false);
   const [vizImage, setVizImage] = useState(null);
   const [vizError, setVizError] = useState(null);
+  const calPickerRef = useRef(null);
+
+  // Scroll the picker fully into view when it opens — it expands the bubble
+  // downward, which can push it below the chat scroll container's viewport.
+  // Scroll the whole bubble (not just the picker) so the Retry/Copy actions
+  // below it stay visible too.
+  useEffect(() => {
+    if (showCalendar) {
+      const id = setTimeout(() => {
+        const bubble = calPickerRef.current?.closest(".msg-bubble");
+        (bubble ?? calPickerRef.current)?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 50);
+      return () => clearTimeout(id);
+    }
+  }, [showCalendar]);
 
   function remove(type) {
     setRemoved((prev) => new Set([...prev, type]));
@@ -232,6 +247,32 @@ export default function OutfitPanel({ items: rawItems, candidates }) {
             </div>
           );
         })}
+
+        {/* Always-present accessory slot — prompts Virgo directly, no chat draft to review */}
+        {!displayedItems.some((item) => item.type === "accessory") && (
+          <button
+            type="button"
+            className="outfit-item-card accessory-cta"
+            disabled={busy}
+            onClick={() => {
+              const acceptedItems = displayedItems.filter((item) => accepted[item.type] === true);
+              const baseItems = acceptedItems.length > 0 ? acceptedItems : displayedItems;
+              const names = baseItems.map((item) => item.name).join(", ");
+              onAccessorize?.(
+                `What accessories from my wardrobe would go well with this outfit: ${names}?`,
+                baseItems
+              );
+            }}
+          >
+            <div className="accessory-cta-label">
+              <p className="oi-name">Add an accessory</p>
+              <p className="oi-hint">Tap to ask Virgo</p>
+            </div>
+            <div className="accessory-silhouette">
+              <span className="oi-icon">🧢</span>
+            </div>
+          </button>
+        )}
       </div>
 
       {anyAccepted && !showCalendar && (
@@ -246,29 +287,16 @@ export default function OutfitPanel({ items: rawItems, candidates }) {
           >
             {visualizing ? "✨ Generating…" : "✨ Visualize"}
           </button>
-          {/* Hide Accessorize once an accessory is already in the accepted outfit */}
-          {!displayedItems.some(
-            (item) => item.type === "accessory" && accepted[item.type] === true
-          ) && (
-            <button
-              className="accessorize-btn"
-              onClick={() => {
-                const acceptedItems = displayedItems.filter(
-                  (item) => accepted[item.type] === true
-                );
-                const names = acceptedItems.map((item) => item.name).join(", ");
-                window.dispatchEvent(new CustomEvent("virgo:prefill-chat", {
-                  detail: {
-                    text: `What accessories from my wardrobe would go well with this outfit: ${names}?`,
-                    carryItems: acceptedItems,
-                  },
-                }));
-              }}
-            >
-              💍 Accessorize
-            </button>
-          )}
         </div>
+      )}
+
+      {showCalendar && (
+        <CalendarPicker
+          ref={calPickerRef}
+          onSave={saveToCalendar}
+          onClose={() => setShowCalendar(false)}
+          saving={saving}
+        />
       )}
 
       {vizImage && (
@@ -278,25 +306,17 @@ export default function OutfitPanel({ items: rawItems, candidates }) {
         </div>
       )}
       {vizError && <p className="viz-error">{vizError}</p>}
-
-      {showCalendar && (
-        <CalendarPicker
-          onSave={saveToCalendar}
-          onClose={() => setShowCalendar(false)}
-          saving={saving}
-        />
-      )}
     </div>
   );
 }
 
-function CalendarPicker({ onSave, onClose, saving }) {
+const CalendarPicker = forwardRef(function CalendarPicker({ onSave, onClose, saving }, ref) {
   const dates = getDateStrip();
   const [selected, setSelected] = useState(fmtDate(dates[0]));
   const [occasion, setOccasion] = useState("");
 
   return (
-    <div className="cal-picker">
+    <div className="cal-picker" ref={ref}>
       <div className="cal-picker-header">
         <span>When are you wearing this?</span>
         <button className="cal-picker-close" onClick={onClose}>✕</button>
@@ -334,4 +354,4 @@ function CalendarPicker({ onSave, onClose, saving }) {
       </div>
     </div>
   );
-}
+});

@@ -55,10 +55,10 @@
   opacity: 0.5;
 }
 
-/* Image */
+/* Image — taller than wide so portrait-oriented product photos show fully */
 .oi-img {
   position: relative;
-  height: 130px;
+  aspect-ratio: 3 / 4;
   background: var(--surface);
   display: flex;
   align-items: center;
@@ -92,17 +92,17 @@
 
 /* Info */
 .oi-info {
-  padding: 8px 8px 4px;
+  padding: 10px 12px 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .oi-name {
-  font-size: 0.78rem;
+  font-size: 1.02rem;
   font-weight: 500;
   line-height: 1.3;
-  height: calc(0.78rem * 1.3 * 2); /* always 2 lines tall */
+  height: calc(1.02rem * 1.3 * 2); /* always 2 lines tall */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -126,16 +126,16 @@
 }
 
 .oi-type {
-  font-size: 0.7rem;
+  font-size: 0.92rem;
   color: var(--text2);
   background: var(--surface);
-  padding: 1px 5px;
+  padding: 3px 8px;
   border-radius: 4px;
   text-transform: capitalize;
 }
 
 .oi-brand {
-  font-size: 0.72rem;
+  font-size: 0.94rem;
   color: var(--text2);
   white-space: nowrap;
   overflow: hidden;
@@ -145,16 +145,16 @@
 .oi-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 5px;
   margin-top: 2px;
 }
 
 .oi-tag {
-  font-size: 0.68rem;
+  font-size: 0.9rem;
   background: rgba(167,139,250,0.1);
   color: var(--accent);
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 3px 8px;
   text-transform: capitalize;
 }
 
@@ -213,6 +213,56 @@
 
 .pool-dot.active { background: var(--accent); }
 
+/* ── Accessory CTA card (always-present 4th panel) ────── */
+
+
+.outfit-item-card.accessory-cta {
+  appearance: none;
+  background: var(--surface2);
+  border: 3px dashed var(--border);
+  font-family: inherit;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 14px 14px;
+  gap: 10px;
+  cursor: pointer;
+  color: inherit;
+}
+.outfit-item-card.accessory-cta:hover:not(:disabled) { border-color: #34d399; }
+.outfit-item-card.accessory-cta:disabled { opacity: 0.5; cursor: default; }
+
+.accessory-cta-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.accessory-cta-label .oi-name {
+  margin: 0;
+  height: auto;
+  display: block;
+  -webkit-line-clamp: unset;
+}
+
+.accessory-silhouette {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.accessory-silhouette .oi-icon {
+  font-size: 15rem;
+  line-height: 1;
+  filter: brightness(0);
+  opacity: 0.92;
+}
+
+.oi-hint {
+  font-size: 0.94rem;
+  color: var(--text2);
+  margin: 0;
+}
+
 /* ── Add to calendar button ───────────────────────────── */
 
 .outfit-action-row {
@@ -242,20 +292,6 @@
   border-color: transparent;
 }
 .oi-btn.remove:hover { color: #f87171; border-color: #f87171; background: rgba(248,113,113,0.08); }
-
-.accessorize-btn {
-  background: rgba(52,211,153,0.1);
-  border: 1px solid #34d399;
-  color: #34d399;
-  border-radius: var(--radius-sm);
-  padding: 8px 14px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.accessorize-btn:hover { background: rgba(52,211,153,0.2); }
 
 .visualize-btn {
   background: rgba(251,191,36,0.12);
@@ -302,6 +338,14 @@
 /* ── Calendar picker ──────────────────────────────────── */
 
 .cal-picker {
+  /* width:0 stops this box (and its wide date-strip content) from
+     contributing to the chat bubble's shrink-to-fit width calculation;
+     min-width:100% then re-expands it to fill whatever width the rest of
+     the bubble's content (the outfit cards) already established. Stays in
+     normal flow so the bubble still grows downward to wrap it. */
+  width: 0;
+  min-width: 100%;
+  box-sizing: border-box;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -334,6 +378,7 @@
   display: flex;
   gap: 6px;
   overflow-x: auto;
+  min-width: 0;
   padding-bottom: 4px;
   scrollbar-width: none;
 }

@@ -333,6 +333,48 @@ async def add_wardrobe_item(req: WardrobeAddRequest):
     return {"id": item_id, "name": req.name}
 
 
+@api.put("/wardrobe/{item_id}")
+async def update_wardrobe_item(item_id: str, req: WardrobeAddRequest):
+    """Edit an existing clothing item via the same form/fields as add_wardrobe_item.
+    Leaves color/season untouched since this form doesn't manage them."""
+    import asyncio
+    from backend.embeddings import embed_text
+
+    profile = get_profile()
+    gender = profile.get("gender", "")
+
+    all_tags = list(req.tags)
+    if gender and gender not in all_tags:
+        all_tags.append(gender)
+    if req.type.lower() not in all_tags:
+        all_tags.append(req.type.lower())
+
+    description = (
+        f"{req.name} by {req.brand}. A {req.type} suitable for {', '.join(req.tags)} occasions."
+        if req.tags
+        else f"{req.name}. A {req.type}."
+    )
+
+    def _update():
+        embedding = embed_text(description)
+        update_fields: dict = {
+            "name": req.name,
+            "type": req.type.lower(),
+            "tags": all_tags,
+            "occasion": req.tags,
+            "brand": req.brand,
+            "image_url": req.image_url,
+            "description": description,
+            "embedding": embedding,
+            "temp_min": req.temp_min,
+            "temp_max": req.temp_max,
+        }
+        wardrobe_col().update_one({"_id": ObjectId(item_id)}, {"$set": update_fields})
+
+    await asyncio.to_thread(_update)
+    return {"id": item_id, "name": req.name}
+
+
 @api.delete("/wardrobe/{item_id}")
 def delete_wardrobe_item(item_id: str):
     result = wardrobe_col().delete_one({"_id": ObjectId(item_id)})

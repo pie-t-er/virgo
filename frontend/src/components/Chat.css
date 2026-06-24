@@ -90,14 +90,10 @@
 .msg-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
-  background: var(--surface2);
-  border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  overflow: hidden;
 }
 
 .msg-avatar img {

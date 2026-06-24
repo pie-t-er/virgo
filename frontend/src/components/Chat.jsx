@@ -61,13 +61,24 @@ export default function Chat({ onAgentAction, prefill, onPrefillConsumed, carryI
     await _doSend(userText);
   }
 
+  // For buttons that live inside the chat page itself (e.g. the OutfitPanel's
+  // accessory prompt) — sends immediately rather than dropping a draft into
+  // the input box, since there's nothing here for the user to review/edit.
+  async function sendDirect(text, items = []) {
+    if (!text || loading) return;
+    setMessages((m) => [...m, { role: "user", text, items: [] }]);
+    setLoading(true);
+    await _doSend(text, items);
+  }
+
   async function retry(userText) {
     if (loading) return;
     setLoading(true);
     await _doSend(userText);
   }
 
-  async function _doSend(userText) {
+  async function _doSend(userText, carryOverride) {
+    const effectiveCarry = carryOverride !== undefined ? carryOverride : carryItems;
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -75,24 +86,24 @@ export default function Chat({ onAgentAction, prefill, onPrefillConsumed, carryI
         body: JSON.stringify({ message: userText }),
       });
       const data = await res.json();
-      // If carry items exist (e.g. from Accessorize), prepend them so the
-      // OutfitPanel shows the full outfit + the new accessories together.
+      // If carry items exist (e.g. from the accessory prompt), prepend them
+      // so the OutfitPanel shows the full outfit + the new accessories together.
       const newItems = data.items || [];
       const newCandidates = data.candidates || {};
       let mergedItems = newItems;
       let mergedCandidates = newCandidates;
-      if (carryItems.length > 0) {
-        const carryIds = new Set(carryItems.map((i) => i._id));
+      if (effectiveCarry.length > 0) {
+        const carryIds = new Set(effectiveCarry.map((i) => i._id));
         mergedItems = [
-          ...carryItems,
+          ...effectiveCarry,
           ...newItems.filter((i) => !carryIds.has(i._id)),
         ];
-        const carryCandidates = carryItems.reduce(
+        const carryCandidates = effectiveCarry.reduce(
           (acc, item) => ({ ...acc, [item.type]: [item] }),
           {}
         );
         mergedCandidates = { ...carryCandidates, ...newCandidates };
-        onCarryConsumed?.();
+        if (carryOverride === undefined) onCarryConsumed?.();
       }
       setMessages((m) => [...m, {
         role: "assistant",
@@ -152,6 +163,8 @@ export default function Chat({ onAgentAction, prefill, onPrefillConsumed, carryI
                   <OutfitPanel
                     items={msg.items}
                     candidates={msg.candidates || {}}
+                    onAccessorize={sendDirect}
+                    busy={loading}
                   />
                 )}
 
@@ -205,10 +218,7 @@ export default function Chat({ onAgentAction, prefill, onPrefillConsumed, carryI
       {messages.length === 1 && (
         <div className="suggestions">
           {SUGGESTIONS.map((s, i) => (
-            <button key={i} className="suggestion-chip" onClick={() => {
-              setInput(s);
-              setTimeout(() => { inputRef.current?.focus(); }, 50);
-            }}>
+            <button key={i} className="suggestion-chip" onClick={() => send(s)}>
               {s}
             </button>
           ))}

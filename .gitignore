@@ -8,3 +8,4 @@ node_modules/
 frontend/dist/
 scripts/macysM.csv
 scripts/macysW.csv
+.claude
