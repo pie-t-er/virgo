@@ -68,9 +68,6 @@ export default function OutfitPanel({ items: rawItems, candidates, onAccessorize
   const [showCalendar, setShowCalendar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [visualizing, setVisualizing] = useState(false);
-  const [vizImage, setVizImage] = useState(null);
-  const [vizError, setVizError] = useState(null);
   const calPickerRef = useRef(null);
 
   // Scroll the picker fully into view when it opens — it expands the bubble
@@ -124,37 +121,10 @@ export default function OutfitPanel({ items: rawItems, candidates, onAccessorize
   const allDecided = displayedItems.every((item) => accepted[item.type] === true);
   const anyAccepted = displayedItems.some((item) => accepted[item.type] === true);
 
-  async function visualizeOutfit() {
-    const acceptedItems = displayedItems.filter((item) => accepted[item.type] === true);
-    if (!acceptedItems.length) return;
-    setVisualizing(true);
-    setVizImage(null);
-    setVizError(null);
-    try {
-      const res = await fetch("/api/visualize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ item_ids: acceptedItems.map((i) => i._id) }),
-      });
-      const data = await res.json();
-      if (data.image) {
-        setVizImage(`data:image/png;base64,${data.image}`);
-      } else {
-        setVizError(data.error || "Could not generate visualization.");
-      }
-    } catch {
-      setVizError("Network error generating visualization.");
-    } finally {
-      setVisualizing(false);
-    }
-  }
-
   async function saveToCalendar(date, occasion) {
     const acceptedItems = displayedItems.filter((item) => accepted[item.type] === true);
     if (!acceptedItems.length) return;
     setSaving(true);
-    // Strip the data-URL prefix before storing — backend re-adds it on read
-    const imageB64 = vizImage ? vizImage.replace(/^data:[^;]+;base64,/, "") : "";
     await fetch("/api/calendar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -162,7 +132,6 @@ export default function OutfitPanel({ items: rawItems, candidates, onAccessorize
         date,
         occasion,
         item_ids: acceptedItems.map((i) => i._id),
-        visualization_image: imageB64,
       }),
     });
     setSaving(false);
@@ -280,13 +249,6 @@ export default function OutfitPanel({ items: rawItems, candidates, onAccessorize
           <button className="add-to-cal-btn" onClick={() => setShowCalendar(true)}>
             📅 Add to calendar
           </button>
-          <button
-            className="visualize-btn"
-            onClick={visualizeOutfit}
-            disabled={visualizing}
-          >
-            {visualizing ? "✨ Generating…" : "✨ Visualize"}
-          </button>
         </div>
       )}
 
@@ -298,14 +260,6 @@ export default function OutfitPanel({ items: rawItems, candidates, onAccessorize
           saving={saving}
         />
       )}
-
-      {vizImage && (
-        <div className="viz-result">
-          <div className="viz-label">AI outfit visualization</div>
-          <img src={vizImage} alt="Outfit visualization" className="viz-image" />
-        </div>
-      )}
-      {vizError && <p className="viz-error">{vizError}</p>}
     </div>
   );
 }

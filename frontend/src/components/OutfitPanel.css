@@ -293,48 +293,6 @@
 }
 .oi-btn.remove:hover { color: #f87171; border-color: #f87171; background: rgba(248,113,113,0.08); }
 
-.visualize-btn {
-  background: rgba(251,191,36,0.12);
-  border: 1px solid #f59e0b;
-  color: #f59e0b;
-  border-radius: var(--radius-sm);
-  padding: 8px 16px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
-}
-.visualize-btn:hover:not(:disabled) { background: rgba(251,191,36,0.22); }
-.visualize-btn:disabled { opacity: 0.5; cursor: default; }
-
-.viz-result {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.viz-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text2);
-}
-
-.viz-image {
-  border-radius: var(--radius);
-  max-width: 320px;
-  width: 100%;
-  border: 1px solid var(--border);
-}
-
-.viz-error {
-  font-size: 0.82rem;
-  color: #f87171;
-  margin: 0;
-}
-
 /* ── Calendar picker ──────────────────────────────────── */
 
 .cal-picker {

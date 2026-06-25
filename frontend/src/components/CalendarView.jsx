@@ -115,24 +115,13 @@ function DayCell({ day, dayStr, isToday, outfits, onClearEntry, onPlanDay }) {
             <span className="cal-occasion">{outfit.occasion}</span>
           )}
 
-          {/* Main display: viz image OR item image grid */}
-          {outfit.visualization_image ? (
-            <div className="cal-viz-wrap">
-              <img
-                src={outfit.visualization_image}
-                alt="Outfit visualization"
-                className="cal-viz-img"
-              />
-            </div>
-          ) : (
-            <div className="cal-items-grid">
-              {[...(outfit.items || [])]
-                .sort((a, b) => (a.type === "accessory" ? -1 : b.type === "accessory" ? 1 : 0))
-                .map((item) => (
-                  <CalItem key={item._id} item={item} />
-                ))}
-            </div>
-          )}
+          <div className="cal-items-grid">
+            {[...(outfit.items || [])]
+              .sort((a, b) => (a.type === "accessory" ? -1 : b.type === "accessory" ? 1 : 0))
+              .map((item) => (
+                <CalItem key={item._id} item={item} />
+              ))}
+          </div>
 
           {outfit.notes && <p className="cal-notes">{outfit.notes}</p>}
 

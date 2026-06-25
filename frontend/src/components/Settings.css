@@ -120,23 +120,3 @@
 }
 .settings-reset-btn:hover:not(:disabled) { background: rgba(248,113,113,0.1); }
 .settings-reset-btn:disabled { opacity: 0.4; cursor: default; }
-
-.settings-photo-label {
-  display: inline-block;
-  padding: 10px 20px;
-  background: rgba(167,139,250,0.1);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  color: var(--accent);
-  font-size: 0.88rem;
-  font-weight: 500;
-  cursor: pointer;
-  align-self: flex-start;
-  transition: background 0.15s;
-}
-.settings-photo-label:hover { background: rgba(167,139,250,0.2); }
-
-.settings-photo-badge {
-  color: var(--accent);
-  font-weight: 500;
-}

@@ -27,7 +27,6 @@ from pydantic import BaseModel
 from backend.agent import get_state, init_state, run_turn
 from backend.db import calendar_col, get_profile, save_profile, wardrobe_col
 from backend.tools import _serialize
-from backend.visualize import generate_outfit_visualization
 
 
 @asynccontextmanager
@@ -63,14 +62,6 @@ class ChatResponse(BaseModel):
     model: str = ""
     items: list = []
     candidates: dict = {}
-
-
-class VisualizeRequest(BaseModel):
-    item_ids: list[str]
-
-
-class PhotosRequest(BaseModel):
-    photos: list[str]  # base64-encoded images
 
 
 # --------------------------------------------------------------------------- #
@@ -166,11 +157,6 @@ def get_calendar(
             if item:
                 items.append(_serialize(item))
         entry["items"] = items
-        # Prefix stored base64 so the frontend can use it directly as a src
-        if entry.get("visualization_image"):
-            entry["visualization_image"] = (
-                "data:image/png;base64," + entry["visualization_image"]
-            )
         results.append(entry)
     return results
 
@@ -179,15 +165,11 @@ class CalendarSaveRequest(BaseModel):
     date: str                        # YYYY-MM-DD
     occasion: str = ""
     item_ids: list[str] = []
-    visualization_image: str = ""    # base64, no data-URL prefix
 
 
 @api.post("/calendar")
 def save_calendar_entry(req: CalendarSaveRequest):
-    """Save an outfit to the calendar.
-    If a visualization is included and an entry for the same date already has
-    the same item set, update that entry in-place instead of inserting a duplicate.
-    """
+    """Save an outfit to the calendar."""
     dt = datetime.datetime.fromisoformat(req.date)
     item_ids = []
     for raw_id in req.item_ids:
@@ -196,24 +178,7 @@ def save_calendar_entry(req: CalendarSaveRequest):
         except Exception:
             pass
 
-    # If a visualization is being saved, check for an existing entry with the same items
-    if req.visualization_image and item_ids:
-        new_set = {str(i) for i in item_ids}
-        for entry in calendar_col().find({"date": dt}):
-            existing_set = {str(i) for i in entry.get("items", [])}
-            if existing_set == new_set:
-                calendar_col().update_one(
-                    {"_id": entry["_id"]},
-                    {"$set": {
-                        "visualization_image": req.visualization_image,
-                        **({"occasion": req.occasion} if req.occasion else {}),
-                    }},
-                )
-                return {"status": "updated", "_id": str(entry["_id"])}
-
     doc: dict = {"date": dt, "occasion": req.occasion, "items": item_ids}
-    if req.visualization_image:
-        doc["visualization_image"] = req.visualization_image
     result = calendar_col().insert_one(doc)
     return {"status": "ok", "_id": str(result.inserted_id)}
 
@@ -230,49 +195,6 @@ def delete_calendar_entry(date: str):
     dt = datetime.datetime.fromisoformat(date)
     result = calendar_col().delete_one({"date": dt})
     return {"deleted": result.deleted_count > 0}
-
-
-@api.post("/visualize")
-async def visualize_outfit(req: VisualizeRequest):
-    """Generate an outfit visualization image using Gemini."""
-    import asyncio
-    from bson import ObjectId as ObjId
-    items = []
-    for item_id in req.item_ids:
-        try:
-            doc = wardrobe_col().find_one({"_id": ObjId(item_id)}, {"embedding": 0})
-            if doc:
-                items.append(_serialize(doc))
-        except Exception:
-            pass
-
-    if not items:
-        return {"error": "No valid items found"}
-
-    profile = get_profile()
-    reference_photos = profile.get("reference_photos") or None
-
-    try:
-        image_b64 = await asyncio.to_thread(
-            generate_outfit_visualization, items, reference_photos
-        )
-        return {"image": image_b64}
-    except Exception as e:
-        return {"error": str(e)}
-
-
-@api.post("/profile/photos")
-async def upload_reference_photos(req: PhotosRequest):
-    """Store user reference photos for outfit visualization."""
-    save_profile({"reference_photos": req.photos[:3]})
-    return {"count": len(req.photos[:3])}
-
-
-@api.get("/profile/photos")
-def get_reference_photos():
-    profile = get_profile()
-    photos = profile.get("reference_photos", [])
-    return {"count": len(photos), "has_photos": len(photos) > 0}
 
 
 class WardrobeAddRequest(BaseModel):

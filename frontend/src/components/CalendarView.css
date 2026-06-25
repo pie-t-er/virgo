@@ -142,22 +142,6 @@
   flex-shrink: 0;
 }
 
-/* Visualization image — fills remaining space */
-.cal-viz-wrap {
-  flex: 1;
-  min-height: 0;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-
-.cal-viz-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 /* Item images grid — vertical stack so each image gets full width */
 .cal-items-grid {
   flex: 1;
